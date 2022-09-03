@@ -48,6 +48,8 @@ const webConfig = {
       assert: require.resolve('assert'),
       'process/browser': require.resolve('process'),
       util: require.resolve('util'),
+      crypto: require.resolve('crypto-browserify'),
+      path: require.resolve('path-browserify'),
     },
   },
   plugins: [
