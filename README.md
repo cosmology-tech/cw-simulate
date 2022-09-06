@@ -1,18 +1,4 @@
-# CWSimulate
-
-This package provides a mock blockchain simulation environment for CosmWasm smart contracts to
-interact with via the `cosmwasm-vm-js` JavaScript runtime.
-
-## Motivation
-
-Although `cosmwasm-vm-js` is sufficient for loading CosmWasm contracts and is capable of executing
-code inside Node.js or the web browser, this by itself is not enough to simulate the effects of
-smart contracts. A higher fidelity simulation environment should support the following:
-
-- user customization of different chain environments for contracts to exist on
-- multiple instances of contracts on multiple chains existing simultaneously
-- an abstraction of various chain modules and chain state
-- snapshot histories of chain states at different heights, and individual contract state diffs
+# `cw-simulate`
 
 This package combines `cosmwasm-vm-js` with additional abstractions and state management to
 more accurately simulate the effects of CosmWasm contracts on the blockchain environments on which
@@ -20,14 +6,79 @@ they are hosted.
 
 ## Features
 
-- support for multiple host chain environments (useful for IBC simulations)
-- support for multiple simultaneous contract instances per chain
+- configure multiple host chain environments with chain-specific settings / state
+- multiple simultaneous contract instances can exist per chain
 - chain modules can be simulated through custom user code
 - extensible for further instrumentation via custom middlewares
 
-## Frontends
 
-The package `cw-simulate` can be either used directly in JavaScript runtimes that support WebAssembly
-such as Node.js or V8-based browsers like Google Chrome. However, many will find that a frontend can
-be more useful for better visualization or interactive usage.
-# cw-simulate
+## Getting Started
+
+Import the `cw-simulate` library from NPM in your `package.json`.
+
+```bash
+$ npm install -S cw-simulate
+```
+
+If you're using Yarn:
+
+```bash
+$ yarn add cw-simulate
+```
+
+## Usage
+
+1. Create a `Simulation` object - this is the global simulation environment where one or more chains can be described.
+2. Create and register your `CWChain` instances against the `Simulation` object, which describe chain-specific configurations.
+3. As needed, per chain:
+   - Upload the WASM bytecode using `CWChain.storeCode()`. This will register a new `codeId` to reference the uploaded contract code.
+   - Create a new contract instance using `CWChain.createInstance()` and passing in the `codeId` generated in the previous step. This results in a `contractAddress` to refer to the contract instance.
+  - Run `instantiate` on the instance -- the contract's `instantiate` entrypoint. 
+  - You can now run `execute` and `query` messages against the instance, and they should work as expected.
+### Example
+
+The following example creates 2 chains, instantiates a contract on one of the chains, and performs an `execute` and `query`.
+
+```typescript
+import { Simulation } from 'cw-simulate';
+import { readFileSync } from 'fs';
+
+const env = new Simulation();
+
+// create first chain
+const chain1 = env.createChain({
+  chainId: 'phoenix-1',
+  bech32Prefix: 'terra'
+});
+
+// create second chain
+const chain2 = env.createChain({
+  chainId: 'juno-1',
+  bech32Prefix: 'juno'
+});
+
+const wasmBytecode = readFileSync('cw-template.wasm');
+
+const code = chain1.storeCode(wasmBytecode);
+const instance = await chain1.instantiateContract(code.codeId);
+
+const info = {
+  sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
+  funds: []
+};
+
+// get contract address
+console.log(instance.contractAddress);
+
+// instantiate the contract
+let result = instance.instantiate(info, { count: 0 });
+console.log(result);
+
+// execute the contract
+result = instance.execute(info, { increment: {} });
+console.log(result);
+
+// query the contract
+result = instance.query({ get_count: {} });
+console.log(result);
+```
