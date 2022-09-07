@@ -19,6 +19,8 @@ jobs:
           token: ${{ secrets.PACKAGE_PAT }}
       - name: Bump
         id: bump-version
+        env:
+          TOKEN_FOR_GITHUB: ${{ secrets.PACKAGE_PAT }}
         run: |
           YARN_VERSION_GIT_TAG='' yarn version --patch
           NEW_VERSION=$(grep -Po '(?<="version": ").*(?=",)' package.json)
