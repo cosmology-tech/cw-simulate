@@ -3,7 +3,7 @@ on: [push]
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
-
+    if: "!contains(github.event.head_commit.message, 'ci-skip')"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
