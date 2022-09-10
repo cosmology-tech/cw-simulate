@@ -1,16 +1,14 @@
 import {
-  BasicKVIterStorage,
-  VMInstance,
   BasicBackendApi,
+  BasicKVIterStorage,
   BasicQuerier,
   IBackend,
-  IStorage,
   IIterStorage,
-  Region,
+  VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
 
 import { CWChain } from './chain';
-import { clone, cloneDeep } from 'lodash';
+import { cloneDeep } from 'lodash';
 
 export class CWContractCode {
   constructor(
