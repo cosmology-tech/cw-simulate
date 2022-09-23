@@ -12,7 +12,6 @@ import { cloneDeep } from 'lodash';
 
 export class CWContractCode {
   constructor(
-    private _chain: CWChain,
     public codeId: number,
     public wasmBytecode: Buffer
   ) {}
@@ -43,14 +42,24 @@ export class CWContractInstance {
   public vm: VMInstance;
   public executionHistory: any[] = [];
 
+  private _bech32Prefix: string;
+  private _height: number;
+  private _time: number;
+  private _chainId: string;
+
   constructor(
-    private _chain: CWChain,
+    chain: CWChain,
     public contractAddress: string,
     public contractCode: CWContractCode,
     public storage: IIterStorage = new BasicKVIterStorage()
   ) {
+    this._bech32Prefix = chain.bech32Prefix;
+    this._height = chain.height;
+    this._time = chain.time,
+    this._chainId = chain.chainId;
+
     let backend: IBackend = {
-      backend_api: new BasicBackendApi(this._chain.bech32Prefix),
+      backend_api: new BasicBackendApi(this._bech32Prefix),
       storage: this.storage,
       querier: new BasicQuerier(),
     };
@@ -64,9 +73,9 @@ export class CWContractInstance {
   getExecutionEnv(): Env {
     return {
       block: {
-        height: this._chain.height,
-        time: this._chain.time.toFixed(),
-        chain_id: this._chain.chainId,
+        height: this._height,
+        time: this._time.toFixed(),
+        chain_id: this._chainId,
       },
       contract: {
         address: this.contractAddress,
