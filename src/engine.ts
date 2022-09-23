@@ -6,7 +6,8 @@ export class CWSimulateEnv {
   constructor() {}
 
   createChain(opts: { chainId: string; bech32Prefix: string }): CWChain {
-    this.chains[opts.chainId] = new CWChain(opts.chainId, opts.bech32Prefix);
-    return new CWChain(opts.chainId, opts.bech32Prefix);
+    const chain = new CWChain(opts.chainId, opts.bech32Prefix)
+    this.chains[opts.chainId] = chain;
+    return chain;
   }
 }
