@@ -42,10 +42,7 @@ export class CWContractInstance {
   public vm: VMInstance;
   public executionHistory: any[] = [];
 
-  private _bech32Prefix: string;
-  private _height: number;
-  private _time: number;
-  private _chainId: string;
+  private _chain: () => CWChain;
 
   constructor(
     chain: CWChain,
@@ -53,13 +50,10 @@ export class CWContractInstance {
     public contractCode: CWContractCode,
     public storage: IIterStorage = new BasicKVIterStorage()
   ) {
-    this._bech32Prefix = chain.bech32Prefix;
-    this._height = chain.height;
-    this._time = chain.time,
-    this._chainId = chain.chainId;
+    this._chain = () => chain;
 
     let backend: IBackend = {
-      backend_api: new BasicBackendApi(this._bech32Prefix),
+      backend_api: new BasicBackendApi(chain.bech32Prefix),
       storage: this.storage,
       querier: new BasicQuerier(),
     };
@@ -73,9 +67,9 @@ export class CWContractInstance {
   getExecutionEnv(): Env {
     return {
       block: {
-        height: this._height,
-        time: this._time.toFixed(),
-        chain_id: this._chainId,
+        height: this._chain().height,
+        time: this._chain().time.toFixed(),
+        chain_id: this._chain().chainId,
       },
       contract: {
         address: this.contractAddress,
