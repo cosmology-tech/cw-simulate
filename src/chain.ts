@@ -54,7 +54,6 @@ export class CWChain {
 
   storeCode(wasmBytecode: Buffer): CWContractCode {
     const contractCode = new CWContractCode(
-      this,
       this.nextCodeId,
       wasmBytecode
     );

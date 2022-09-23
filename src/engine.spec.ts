@@ -60,4 +60,52 @@ describe('CWSimulateEnv', () => {
     instance.execute(info, {increment: {}});
     instance.execute(info, {increment: {}});
   });
+
+  it('can serialize chains', async () => {
+    // Arrange
+    const env = new CWSimulateEnv();
+    env.createChain({
+      chainId: 'phoenix-1',
+      bech32Prefix: 'terra',
+    });
+
+    // Act
+    const serialized = JSON.stringify(env);
+
+    // Assert
+    expect(serialized).toBeDefined();
+  });
+
+  it('can serialize codes', async () => {
+    // Arrange
+    const env = new CWSimulateEnv();
+    const chain = env.createChain({
+      chainId: 'phoenix-1',
+      bech32Prefix: 'terra',
+    });
+    chain.storeCode(wasmBytecode);
+
+    // Act
+    const serialized = JSON.stringify(env);
+
+    // Assert
+    expect(serialized).toBeDefined();
+  });
+
+  it('can serialize instances', async () => {
+    // Arrange
+    const env = new CWSimulateEnv();
+    const chain = env.createChain({
+      chainId: 'phoenix-1',
+      bech32Prefix: 'terra',
+    });
+    const code = chain.storeCode(wasmBytecode);
+    const instance = await chain.instantiateContract(code.codeId);
+
+    // Act
+    const serialized = JSON.stringify(instance.vm);
+
+    // Assert
+    expect(serialized).toBeDefined();
+  });
 });
