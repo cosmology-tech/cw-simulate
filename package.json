@@ -35,7 +35,7 @@
     "@cosmjs/amino": "^0.28.13",
     "@cosmjs/crypto": "^0.28.13",
     "@cosmjs/encoding": "^0.28.13",
-    "@terran-one/cosmwasm-vm-js": "^0.1.17",
+    "@terran-one/cosmwasm-vm-js": "^0.1.18",
     "@types/lodash": "^4.14.184",
     "lobyte": "^0.0.3",
     "lodash": "^4.17.21"
