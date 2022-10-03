@@ -1,6 +1,7 @@
 import { CWContractCode, CWContractInstance } from './contract';
 import { Sha256 } from '@cosmjs/crypto';
 import { toBech32 } from '@cosmjs/encoding';
+import { CWAccount } from './account';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -39,9 +40,8 @@ export class CWChain {
     public height: number = 1,
     public time: number = 0,
     public codes: { [id: number]: CWContractCode } = {},
-    public contracts: {
-      [contractAddress: string]: CWContractInstance;
-    } = {}
+    public contracts: { [contractAddress: string]: CWContractInstance } = {},
+    public accounts: { [address: string]: CWAccount } = {}
   ) {}
 
   get nextCodeId(): number {
