@@ -33,7 +33,7 @@ $ yarn add cw-simulate
 3. As needed, per chain:
    - Upload the WASM bytecode using `CWChain.storeCode()`. This will register a new `codeId` to reference the uploaded contract code.
    - Create a new contract instance using `CWChain.createInstance()` and passing in the `codeId` generated in the previous step. This results in a `contractAddress` to refer to the contract instance.
-  - Run `instantiate` on the instance -- the contract's `instantiate` entrypoint. 
+  - Run `instantiate` on the instance -- the contract's `instantiate` entrypoint.
   - You can now run `execute` and `query` messages against the instance, and they should work as expected.
 ### Example
 
