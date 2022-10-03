@@ -14,8 +14,8 @@ describe('CWSimulateEnv', () => {
     });
 
     const account = new CWAccount('terraaddress123', {
-      'uluna': '1000',
-      'uust': '10000'
+      'uluna': {denom: 'uluna', amount: '1000'},
+      'uust': {denom: 'uust', amount: '10000'}
     });
     chain.accounts[account.address] = account;
 
@@ -28,8 +28,8 @@ describe('CWSimulateEnv', () => {
     const execEnv = instance.getExecutionEnv();
 
     // Assert
-    expect(chain.accounts['terraaddress123'].balances['uluna']).toBe('1000');
-    expect(chain.accounts['terraaddress123'].balances['uust']).toBe('10000');
+    expect(chain.accounts['terraaddress123'].balances['uluna'].amount).toBe('1000');
+    expect(chain.accounts['terraaddress123'].balances['uust'].amount).toBe('10000');
 
     expect(execEnv.block.height).toBe(123);
     expect(execEnv.block.time).toBe('456');
