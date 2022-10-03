@@ -1,7 +1,7 @@
-import { Coin, CWContractCode, CWContractInstance } from './contract';
+import { CWContractCode, CWContractInstance } from './contract';
 import { Sha256 } from '@cosmjs/crypto';
 import { toBech32 } from '@cosmjs/encoding';
-import { CWAccount } from './address';
+import { CWAccount } from './account';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);

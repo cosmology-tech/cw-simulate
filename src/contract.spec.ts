@@ -1,6 +1,6 @@
 import { CWSimulateEnv } from './engine';
 import { readFileSync } from 'fs';
-import { CWAccount } from './address';
+import { CWAccount } from './account';
 
 const wasmBytecode = readFileSync('testing/hello_world-aarch64.wasm');
 
