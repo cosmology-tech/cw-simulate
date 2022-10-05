@@ -38,9 +38,25 @@ export interface MsgInfo {
   funds: Coin[];
 }
 
+export type ExecutionHistoryRecord = {
+  request: {
+    env: Env,
+    info: MsgInfo,
+  } & (
+    | {
+        instantiateMsg: any;
+      }
+    | {
+        executeMsg: any;
+      }
+  );
+  response: any;
+  state: IIterStorage;
+}
+
 export class CWContractInstance {
   public vm: VMInstance;
-  public executionHistory: any[] = [];
+  public executionHistory: ExecutionHistoryRecord[] = [];
 
   private _chain: () => CWChain;
 
