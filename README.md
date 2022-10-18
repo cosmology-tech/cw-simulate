@@ -17,13 +17,13 @@ they are hosted.
 Import the `cw-simulate` library from NPM in your `package.json`.
 
 ```bash
-$ npm install -S cw-simulate
+$ npm install -S @terran-one/cw-simulate
 ```
 
 If you're using Yarn:
 
 ```bash
-$ yarn add cw-simulate
+$ yarn add @terran-one/cw-simulate
 ```
 
 ## Usage
