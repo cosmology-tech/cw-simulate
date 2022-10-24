@@ -7,8 +7,10 @@ import {
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
 
+import { Ok, Err, Result } from 'ts-results';
+
 import { CWChain } from './chain';
-import { cloneDeep } from 'lodash';
+import { ContractResponse } from './cw-interface';
 
 export class CWContractCode {
   constructor(
@@ -54,6 +56,36 @@ export type ExecutionHistoryRecord = {
   state: IIterStorage;
 }
 
+export class ExecResponse {
+  constructor(public messages: any[], public events: any[], public attributes: any[], public data: string | null) {
+  }
+}
+
+export class ExecError {
+  constructor(public error: string) {}
+}
+
+export type RustResult<T, E> = {
+  ok: T
+} | { error : E };
+
+
+export interface Response {
+  messages: any[];
+  events: any[];
+  attributes: any[];
+  data: string | null;
+}
+
+function rust2TsResult<T>(r: RustResult<T, string>): Result<T, Error> {
+  if ('ok' in r) {
+    return Ok(r.ok);
+  } else {
+    return Err(new Error(r.error));
+  }
+}
+
+
 export class CWContractInstance {
   public vm: VMInstance;
   public executionHistory: ExecutionHistoryRecord[] = [];
@@ -93,41 +125,35 @@ export class CWContractInstance {
     };
   }
 
-  instantiate(info: MsgInfo, instantiateMsg: any): any {
+  instantiate(info: MsgInfo, instantiateMsg: any): Result<ContractResponse, Error> {
     let env = this.getExecutionEnv();
-    const response = this.vm.instantiate(env, info, instantiateMsg).json;
-
-    this.executionHistory.push({
-      request: {
-        env,
-        info,
-        instantiateMsg,
-      },
-      response,
-      state: cloneDeep(this.storage),
-    });
-    return response;
+    let result = rust2TsResult(this.vm.instantiate(env, info, instantiateMsg).json as RustResult<Response, string>);
+    if (result.ok) {
+      return Ok(ContractResponse.fromData(result.val));
+    } else {
+      return Err(result.val);
+    }
   }
 
-  execute(info: MsgInfo, executeMsg: any): any {
+  execute(info: MsgInfo, executeMsg: any): Result<ContractResponse, Error> {
     let env = this.getExecutionEnv();
-    const response = this.vm.execute(env, info, executeMsg).json;
-
-    this.executionHistory.push({
-      request: {
-        env,
-        info,
-        executeMsg,
-      },
-      response,
-      // @ts-ignore
-      state: cloneDeep(this.storage),
-    });
-
-    return response;
+    let result = rust2TsResult(this.vm.execute(env, info, executeMsg).json as RustResult<Response, string>);
+    if (result.ok) {
+      return Ok(ContractResponse.fromData(result.val));
+    } else {
+      return Err(result.val);
+    }
   }
 
-  query(queryMsg: any): any {
-    return this.vm.query(this.getExecutionEnv(), queryMsg).json;
+  query(queryMsg: any): Result<any, Error> {
+    let env = this.getExecutionEnv();
+    let result = rust2TsResult(this.vm.query(env, queryMsg).json as RustResult<any, string>);
+    if (result.ok) {
+      // result.val = base64-encoded string with json
+      let json = JSON.parse(Buffer.from(result.val, 'base64').toString('utf8'));
+      return Ok(json);
+    } else {
+      return Err(result.val);
+    }
   }
 }

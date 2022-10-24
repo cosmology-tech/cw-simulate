@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 
 const wasmBytecode = readFileSync('testing/hello_world-aarch64.wasm');
 
+
 describe('CWSimulateEnv', () => {
   it('works', async () => {
     let env = new CWSimulateEnv();
@@ -57,8 +58,9 @@ describe('CWSimulateEnv', () => {
 
     let result2 = instance2.execute(info, {increment: {}});
 
-    instance.execute(info, {increment: {}});
-    instance.execute(info, {increment: {}});
+    let res = instance.execute(info, {increment: {}});
+    res = instance.execute(info, {increment: {}});
+
   });
 
   it('can serialize chains', async () => {

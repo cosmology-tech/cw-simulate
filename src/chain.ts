@@ -1,7 +1,11 @@
-import { CWContractCode, CWContractInstance } from './contract';
+import { Result, Ok, Err } from 'ts-results';
+import { CWContractCode, CWContractInstance, MsgInfo } from './contract';
 import { Sha256 } from '@cosmjs/crypto';
-import { toBech32 } from '@cosmjs/encoding';
+import { fromBech32, toBech32 } from '@cosmjs/encoding';
 import { CWAccount } from './account';
+import { Event, Binary, ContractResponse } from './cw-interface';
+import { BasicKVIterStorage, IIterStorage } from '@terran-one/cosmwasm-vm-js';
+import { CodeInfo, ContractInfo } from './telescope/cosmwasm/wasm/v1/types';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -33,16 +37,44 @@ function buildContractAddress(codeId: number, instanceId: number): Uint8Array {
   return hash.slice(0, 20);
 }
 
+export interface AppResponse {
+  events: Event[],
+  data: Binary | null,
+}
+
+export interface CWChainOptions {
+  chainId: string;
+  bech32Prefix: string;
+}
+
 export class CWChain {
+
+  public chainId: string;
+  public bech32Prefix: string;
+
+  public codes: {[id: number]: CWContractCode};
+  public contracts: {[contractAddress: string]: CWContractInstance};
+
+  // backend
+  public store: IIterStorage;
+  public height: number;
+  public time: number;
+
+
   constructor(
-    public chainId: string,
-    public bech32Prefix: string,
-    public height: number = 1,
-    public time: number = 0,
-    public codes: { [id: number]: CWContractCode } = {},
-    public contracts: { [contractAddress: string]: CWContractInstance } = {},
-    public accounts: { [address: string]: CWAccount } = {}
-  ) {}
+    options: CWChainOptions,
+  ) {
+    this.chainId = options.chainId;
+    this.bech32Prefix = options.bech32Prefix;
+
+
+    this.codes = {};
+    this.contracts = {};
+
+    this.store = new BasicKVIterStorage();
+    this.height = 1;
+    this.time = 0;
+  }
 
   get nextCodeId(): number {
     return Object.keys(this.codes).length + 1;
@@ -52,16 +84,16 @@ export class CWChain {
     return Object.keys(this.contracts).length + 1;
   }
 
-  storeCode(wasmBytecode: Buffer): CWContractCode {
-    const contractCode = new CWContractCode(
-      this.nextCodeId,
-      wasmBytecode
-    );
+  create(creator: string, wasmCode: Uint8Array): number {
+
+    let codeInfo = CodeInfo.encode({ creator: creator, codeHash: Uint8Array.from([]) });
+    
+    this.store.set();
     this.codes[this.nextCodeId] = contractCode;
     return contractCode;
   }
 
-  async instantiateContract(codeId: number): Promise<CWContractInstance> {
+  instantiateContract(msg: MsgInstantiateContract) {
     const contractAddressHash = buildContractAddress(
       codeId,
       this.nextInstanceId
@@ -76,4 +108,29 @@ export class CWChain {
     this.contracts[contractAddress] = contractInstance;
     return contractInstance;
   }
+
+  instantiateContract(contractAddress: string, info: MsgInfo, instantiateMsg: any): any {
+    const contractInstance = this.contracts[contractAddress];
+    let res = contractInstance.instantiate(info, instantiateMsg);
+    if (res.ok) {
+      this.handleContractResponse(res.val);
+    } else {
+      return res;
+    }
+  }
+
+  executeContract(contractAddress: string, info: MsgInfo, executeMsg: any): any {
+    const contractInstance = this.contracts[contractAddress];
+    let res = contractInstance.execute(info, executeMsg);
+  }
+
+  queryContract(contractAddress: string, queryMsg: any): Result<any, Error> {
+    const contractInstance = this.contracts[contractAddress];
+    return contractInstance.query(queryMsg);
+  }
+
+  private handleContractResponse(res: ContractResponse) {
+
+  }
+
 }

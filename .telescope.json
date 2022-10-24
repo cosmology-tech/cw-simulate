@@ -1,0 +1,17 @@
+{
+  "protoDirs": [
+    "./proto"
+  ],
+  "outPath": "./src/telescope",
+  "options": {
+    "aminoEncoding": {
+      "enabled": true
+    },
+    "lcdClients": {
+      "enabled": false
+    },
+    "rpcClients": {
+      "enabled": false
+    }
+  }
+}
