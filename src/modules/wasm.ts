@@ -301,13 +301,13 @@ export class WasmModule {
           },
         };
         let replyRes = await this.reply(contractAddress, replyMsg);
-        if (replyRes.ok) {
+        if (replyRes.err) {
+          // submessage failed, call reply, reply failed
+          return replyRes;
+        } else {
           // submessage failed, call reply, reply success
           let { events, data } = replyRes.val;
           return Ok({ events, data });
-        } else {
-          // submessage failed, call reply, reply failed
-          return replyRes;
         }
       } else {
         // submessage failed, don't call reply (equivalent to normal message)
