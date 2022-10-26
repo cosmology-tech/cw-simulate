@@ -9,14 +9,11 @@ import {
 
 import { Ok, Err, Result } from 'ts-results';
 
-import { CWChain } from './chain';
+import { CWSimulateApp } from './CWSimulateApp';
 import { ContractResponse } from './cw-interface';
 
 export class CWContractCode {
-  constructor(
-    public codeId: number,
-    public wasmBytecode: Buffer
-  ) {}
+  constructor(public codeId: number, public wasmBytecode: Buffer) {}
 }
 
 export interface Env {
@@ -42,8 +39,8 @@ export interface MsgInfo {
 
 export type ExecutionHistoryRecord = {
   request: {
-    env: Env,
-    info: MsgInfo,
+    env: Env;
+    info: MsgInfo;
   } & (
     | {
         instantiateMsg: any;
@@ -54,21 +51,26 @@ export type ExecutionHistoryRecord = {
   );
   response: any;
   state: IIterStorage;
-}
+};
 
 export class ExecResponse {
-  constructor(public messages: any[], public events: any[], public attributes: any[], public data: string | null) {
-  }
+  constructor(
+    public messages: any[],
+    public events: any[],
+    public attributes: any[],
+    public data: string | null
+  ) {}
 }
 
 export class ExecError {
   constructor(public error: string) {}
 }
 
-export type RustResult<T, E> = {
-  ok: T
-} | { error : E };
-
+export type RustResult<T, E> =
+  | {
+      ok: T;
+    }
+  | { error: E };
 
 export interface Response {
   messages: any[];
@@ -85,15 +87,14 @@ function rust2TsResult<T>(r: RustResult<T, string>): Result<T, Error> {
   }
 }
 
-
 export class CWContractInstance {
   public vm: VMInstance;
   public executionHistory: ExecutionHistoryRecord[] = [];
 
-  private _chain: () => CWChain;
+  private _chain: () => CWSimulateApp;
 
   constructor(
-    chain: CWChain,
+    chain: CWSimulateApp,
     public contractAddress: string,
     public contractCode: CWContractCode,
     public storage: IIterStorage = new BasicKVIterStorage()
@@ -125,9 +126,17 @@ export class CWContractInstance {
     };
   }
 
-  instantiate(info: MsgInfo, instantiateMsg: any): Result<ContractResponse, Error> {
+  instantiate(
+    info: MsgInfo,
+    instantiateMsg: any
+  ): Result<ContractResponse, Error> {
     let env = this.getExecutionEnv();
-    let result = rust2TsResult(this.vm.instantiate(env, info, instantiateMsg).json as RustResult<Response, string>);
+    let result = rust2TsResult(
+      this.vm.instantiate(env, info, instantiateMsg).json as RustResult<
+        Response,
+        string
+      >
+    );
     if (result.ok) {
       return Ok(ContractResponse.fromData(result.val));
     } else {
@@ -137,7 +146,12 @@ export class CWContractInstance {
 
   execute(info: MsgInfo, executeMsg: any): Result<ContractResponse, Error> {
     let env = this.getExecutionEnv();
-    let result = rust2TsResult(this.vm.execute(env, info, executeMsg).json as RustResult<Response, string>);
+    let result = rust2TsResult(
+      this.vm.execute(env, info, executeMsg).json as RustResult<
+        Response,
+        string
+      >
+    );
     if (result.ok) {
       return Ok(ContractResponse.fromData(result.val));
     } else {
@@ -147,7 +161,9 @@ export class CWContractInstance {
 
   query(queryMsg: any): Result<any, Error> {
     let env = this.getExecutionEnv();
-    let result = rust2TsResult(this.vm.query(env, queryMsg).json as RustResult<any, string>);
+    let result = rust2TsResult(
+      this.vm.query(env, queryMsg).json as RustResult<any, string>
+    );
     if (result.ok) {
       // result.val = base64-encoded string with json
       let json = JSON.parse(Buffer.from(result.val, 'base64').toString('utf8'));

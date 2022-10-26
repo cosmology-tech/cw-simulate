@@ -2,6 +2,11 @@ export namespace Binary {
   export type Data = string;
 }
 
+export type AppResponse = {
+  events: any[];
+  data: string | null;
+};
+
 export class Binary {
   constructor(public data: string) {}
 
@@ -123,7 +128,7 @@ export class ContractResponse {
       data.messages.map(m => SubMsg.fromData(m)),
       data.events.map(e => Event.fromData(e)),
       data.attributes.map(a => Attribute.fromData(a)),
-      (data.data !== null) ? Binary.fromData(data.data) : null
+      data.data !== null ? Binary.fromData(data.data) : null
     );
   }
 }

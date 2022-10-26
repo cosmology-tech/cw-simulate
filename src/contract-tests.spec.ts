@@ -1,12 +1,11 @@
-import { readFileSync} from 'fs';
-import { CWSimulateEnv } from './engine';
+import { readFileSync } from 'fs';
+import { CWSimulateApp } from './CWSimulateApp';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
 describe('CWSimulate Contract Tests', function() {
   it('works', async () => {
-    let env = new CWSimulateEnv();
-    let chain = env.createChain({
+    let app = new CWSimulateApp({
       chainId: 'phoenix-1',
       bech32Prefix: 'terra',
     });
@@ -16,8 +15,10 @@ describe('CWSimulate Contract Tests', function() {
       funds: [],
     };
 
-    let code = chain.storeCode(testBytecode);
-    let { contractAddress } = await chain.createContractInstance(code.codeId);
+    let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
+    let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
+    let { contractAddress } = res;
+    console.log(res);
 
     let executeMsg = {
       run: {
@@ -25,17 +26,23 @@ describe('CWSimulate Contract Tests', function() {
           {
             msg: {
               push: {
-                data: "Hello"
-              }
-            }
-          }
-        ]
-      }
+                data: 'Hello',
+              },
+            },
+          },
+        ],
+      },
     };
 
-    chain.instantiateContract(contractAddress, info, {});
-    chain.executeContract(contractAddress, info, executeMsg);
-    let res = chain.queryContract(contractAddress, { get_buffer: {} });
+    res = await app.wasm.execute(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+    console.log(res);
+
+    res = await app.wasm.query(contractAddress, { get_buffer: {} });
     console.log(res);
   });
 });

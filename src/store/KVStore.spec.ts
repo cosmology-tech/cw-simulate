@@ -1,4 +1,4 @@
-import { KVStore } from './store';
+import { KVStore } from './KVStore';
 import { toAscii } from '@cosmjs/encoding';
 
 function ascii(s: string): Uint8Array {
