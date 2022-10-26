@@ -113,6 +113,7 @@ describe('CWSimulate Contract Tests', function () {
       sub(1, run([msg(push('S1'))]), ReplyOn.SUCCESS),
       sub(2, run([err('s2')]), ReplyOn.ERROR),
       msg(push('M1')),
+      msg(run([err('fail at end')])),
     ]);
 
     res = await app.wasm.execute(

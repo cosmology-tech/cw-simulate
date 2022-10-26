@@ -9,6 +9,7 @@ import {
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
 import { ContractResponse, RustResult, SubMsg } from '../cw-interface';
+import { Map } from 'immutable';
 import { Result, Ok, Err } from 'ts-results';
 
 export interface AppResponse {
@@ -50,11 +51,9 @@ export type WasmMsg =
 export class WasmModule {
   public lastCodeId: number;
   public lastInstanceId: number;
-  public store: any;
 
   constructor(public chain: CWSimulateApp) {
-    chain.store.wasm = { codes: {}, contracts: {}, contractStorage: {} };
-    this.store = chain.store.wasm;
+    chain.store.set('wasm', { codes: {}, contracts: {}, contractStorage: {} });
 
     this.lastCodeId = 0;
     this.lastInstanceId = 0;
@@ -88,7 +87,10 @@ export class WasmModule {
       wasmCode,
     };
 
-    this.store.codes[this.lastCodeId + 1] = codeInfo;
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'codes', this.lastCodeId + 1],
+      codeInfo
+    );
     this.lastCodeId += 1;
     return this.lastCodeId;
   }
@@ -107,12 +109,23 @@ export class WasmModule {
   }
 
   async buildVM(contractAddress: string): Promise<VMInstance> {
-    let { codeId } = this.store.contracts[contractAddress];
-    let { wasmCode } = this.store.codes[codeId];
+    // @ts-ignore
+    let { codeId } = this.chain.store.getIn([
+      'wasm',
+      'contracts',
+      contractAddress,
+    ]);
+    // @ts-ignore
+    let { wasmCode } = this.chain.store.getIn(['wasm', 'codes', codeId]);
 
     let backend: IBackend = {
       backend_api: new BasicBackendApi(this.chain.bech32Prefix),
-      storage: this.store.contractStorage[contractAddress],
+      // @ts-ignore
+      storage: this.chain.store.getIn([
+        'wasm',
+        'contractStorage',
+        contractAddress,
+      ]),
       querier: new BasicQuerier(),
     };
 
@@ -147,8 +160,14 @@ export class WasmModule {
       created: this.chain.height,
     };
 
-    this.store.contracts[contractAddress] = contractInfo;
-    this.store.contractStorage[contractAddress] = new BasicKVIterStorage();
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'contracts', contractAddress],
+      contractInfo
+    );
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'contractStorage', contractAddress],
+      new BasicKVIterStorage()
+    );
     this.lastInstanceId += 1;
 
     let vm = await this.buildVM(contractAddress);
@@ -175,7 +194,11 @@ export class WasmModule {
     contractAddress: string,
     executeMsg: any
   ): Promise<Result<AppResponse, string>> {
-    let contractInfo = this.store.contracts[contractAddress];
+    let contractInfo = this.chain.store.getIn([
+      'wasm',
+      'contracts',
+      contractAddress,
+    ]);
     if (contractInfo === undefined) {
       throw new Error(`Contract ${contractAddress} does not exist`);
     }
@@ -185,11 +208,14 @@ export class WasmModule {
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
+    let snapshot = this.chain.store;
+
     let res = vm.execute(env, info, executeMsg)
       .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       return await this.handleContractResponse(contractAddress, res.ok);
     } else {
+      this.chain.store = snapshot;
       return Err(res.error);
     }
   }
@@ -199,9 +225,23 @@ export class WasmModule {
     res: ContractResponse.Data
   ): Promise<Result<AppResponse, string>> {
     let { messages, events, attributes, data } = res;
+    let snapshot = this.chain.store;
+    let contractStorage = this.chain.store.getIn([
+      'wasm',
+      'contractStorage',
+      contractAddress,
+    ]) as BasicKVIterStorage;
+    let contractSnapshot = new BasicKVIterStorage();
+    contractSnapshot.dict = contractStorage.dict;
+
     for (const message of messages) {
       let subres = await this.executeSubmsg(contractAddress, message);
       if (subres.err) {
+        this.chain.store = snapshot;
+        this.chain.store = this.chain.store.setIn(
+          ['wasm', 'contractStorage', contractAddress],
+          contractSnapshot
+        );
         return subres;
       } else {
         events = [...events, ...subres.val.events];
@@ -221,10 +261,10 @@ export class WasmModule {
     let { id, msg, gas_limit, reply_on } = message;
     let r = await this.chain.handleMsg(contractAddress, msg);
     if (r.ok) {
-      // submessage was successful
+      // submessage success
       let { events, data } = r.val;
       if (reply_on === 'success' || reply_on === 'always') {
-        // call reply
+        // submessage success, call reply
         let replyMsg = {
           id,
           result: {
@@ -236,24 +276,24 @@ export class WasmModule {
         };
         let replyRes = await this.reply(contractAddress, replyMsg);
         if (replyRes.err) {
-          // reply failed
+          // submessage success, call reply, reply failed
           return replyRes;
         } else {
-          // reply success
+          // submessage success, call reply, reply success
           if (replyRes.val.data !== null) {
             data = replyRes.val.data;
           }
           events = [...events, ...replyRes.val.events];
         }
       } else {
-        // don't call reply
+        // submessage success, don't call reply
         data = null;
       }
       return Ok({ events, data });
     } else {
       // submessage failed
       if (reply_on === 'error' || reply_on === 'always') {
-        // call reply
+        // submessage failed, call reply
         let replyMsg = {
           id,
           result: {
@@ -262,15 +302,15 @@ export class WasmModule {
         };
         let replyRes = await this.reply(contractAddress, replyMsg);
         if (replyRes.ok) {
-          // reply success
+          // submessage failed, call reply, reply success
           let { events, data } = replyRes.val;
           return Ok({ events, data });
         } else {
-          // reply failed
+          // submessage failed, call reply, reply failed
           return replyRes;
         }
       } else {
-        // don't call reply
+        // submessage failed, don't call reply (equivalent to normal message)
         return r;
       }
     }

@@ -1,5 +1,6 @@
 import { WasmModule } from './modules/wasm';
 import { AppResponse } from './cw-interface';
+import { Map } from 'immutable';
 import { Result, Ok, Err } from 'ts-results';
 
 export interface CWSimulateAppOptions {
@@ -11,7 +12,7 @@ export class CWSimulateApp {
   public chainId: string;
   public bech32Prefix: string;
 
-  public store: any;
+  public store: Map<string, any>;
   public height: number;
   public time: number;
 
@@ -20,7 +21,7 @@ export class CWSimulateApp {
   constructor(options: CWSimulateAppOptions) {
     this.chainId = options.chainId;
     this.bech32Prefix = options.bech32Prefix;
-    this.store = {};
+    this.store = Map<string, any>();
     this.height = 1;
     this.time = 0;
 
