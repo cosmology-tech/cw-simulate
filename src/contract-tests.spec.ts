@@ -3,7 +3,7 @@ import { CWSimulateApp } from './CWSimulateApp';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
-describe('CWSimulate Contract Tests', function() {
+describe('CWSimulate Contract Tests', function () {
   it('works', async () => {
     let app = new CWSimulateApp({
       chainId: 'phoenix-1',

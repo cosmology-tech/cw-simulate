@@ -106,6 +106,8 @@ export namespace SubMsg {
   }
 }
 
+export type RustResult<T> = { ok: T } | { error: string };
+
 export namespace ContractResponse {
   export interface Data {
     messages: SubMsg.Data[];

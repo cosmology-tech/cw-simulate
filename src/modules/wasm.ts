@@ -8,7 +8,7 @@ import {
   IBackend,
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
-import { ContractResponse, SubMsg } from '../cw-interface';
+import { ContractResponse, RustResult, SubMsg } from '../cw-interface';
 import { Result, Ok, Err } from 'ts-results';
 
 export interface AppResponse {
@@ -149,29 +149,24 @@ export class WasmModule {
 
     this.store.contracts[contractAddress] = contractInfo;
     this.store.contractStorage[contractAddress] = new BasicKVIterStorage();
+    this.lastInstanceId += 1;
 
-    // call instantiate on the contract
-    let backend: IBackend = {
-      backend_api: new BasicBackendApi(this.chain.bech32Prefix),
-      storage: this.store.contractStorage[contractAddress],
-      querier: new BasicQuerier(),
-    };
-
-    let vm = new VMInstance(backend);
-    await vm.build(this.store.codes[codeId].wasmCode);
+    let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
-    let res: any = vm.instantiate(env, info, instantiateMsg).json;
-    // TODO: handle contract response
-    return {
-      contractAddress,
-      result: {
-        events: res.ok.events,
-        data: res.ok.data,
-      },
-    };
+    let res = vm.instantiate(env, info, instantiateMsg)
+      .json as RustResult<ContractResponse.Data>;
+    if ('ok' in res) {
+      let response = await this.handleContractResponse(contractAddress, res.ok);
+      return {
+        contractAddress,
+        response,
+      };
+    } else {
+      return res;
+    }
   }
 
   async execute(
@@ -179,7 +174,7 @@ export class WasmModule {
     funds: Coin[],
     contractAddress: string,
     executeMsg: any
-  ): Promise<any> {
+  ): Promise<Result<AppResponse, string>> {
     let contractInfo = this.store.contracts[contractAddress];
     if (contractInfo === undefined) {
       throw new Error(`Contract ${contractAddress} does not exist`);
@@ -190,23 +185,13 @@ export class WasmModule {
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
-    let res: any = vm.execute(env, info, executeMsg).json;
-
-    // TODO: handle contract response
-    if (res.ok) {
-      let handledResponse = await this.handleContractResponse(
-        contractAddress,
-        res.ok
-      );
-      console.log(handledResponse);
+    let res = vm.execute(env, info, executeMsg)
+      .json as RustResult<ContractResponse.Data>;
+    if ('ok' in res) {
+      return await this.handleContractResponse(contractAddress, res.ok);
     } else {
-      throw new Error(res.error);
+      return Err(res.error);
     }
-
-    return {
-      events: res.ok.events,
-      data: res.ok.data,
-    };
   }
 
   async handleContractResponse(
@@ -216,7 +201,9 @@ export class WasmModule {
     let { messages, events, attributes, data } = res;
     for (const message of messages) {
       let subres = await this.executeSubmsg(contractAddress, message);
-      if (subres.ok) {
+      if (subres.err) {
+        return subres;
+      } else {
         events = [...events, ...subres.val.events];
         if (subres.val.data === null) {
           data = subres.val.data;
@@ -248,15 +235,15 @@ export class WasmModule {
           },
         };
         let replyRes = await this.reply(contractAddress, replyMsg);
-        if (replyRes.ok) {
+        if (replyRes.err) {
+          // reply failed
+          return replyRes;
+        } else {
           // reply success
           if (replyRes.val.data !== null) {
             data = replyRes.val.data;
           }
           events = [...events, ...replyRes.val.events];
-        } else {
-          // reply failed
-          return replyRes;
         }
       } else {
         // don't call reply
@@ -284,7 +271,7 @@ export class WasmModule {
         }
       } else {
         // don't call reply
-        return Err(r.val);
+        return r;
       }
     }
   }
@@ -294,10 +281,8 @@ export class WasmModule {
     replyMsg: any
   ): Promise<Result<AppResponse, string>> {
     let vm = await this.buildVM(contractAddress);
-    let res: any = vm.reply(
-      this.getExecutionEnv(contractAddress),
-      replyMsg
-    ).json;
+    let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
+      .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       // handle response
       return await this.handleContractResponse(contractAddress, res.ok);
@@ -312,7 +297,7 @@ export class WasmModule {
   ): Promise<Result<any, string>> {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
-    let res: any = vm.query(env, queryMsg).json;
+    let res = vm.query(env, queryMsg).json as RustResult<string>;
 
     if ('ok' in res) {
       return Ok(JSON.parse(fromUtf8(fromBase64(res.ok))));
