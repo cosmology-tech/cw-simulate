@@ -1,5 +1,5 @@
 import { Sha256 } from '@cosmjs/crypto';
-import { fromAscii, fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
+import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
 import { CWSimulateApp } from 'CWSimulateApp';
 import {
   BasicBackendApi,
@@ -9,8 +9,7 @@ import {
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
 import { ContractResponse, RustResult, SubMsg } from '../cw-interface';
-import { Map } from 'immutable';
-import { Result, Ok, Err } from 'ts-results';
+import { Err, Ok, Result } from 'ts-results';
 
 export interface AppResponse {
   events: any[];
@@ -45,15 +44,15 @@ export interface Instantiate {
 }
 
 export type WasmMsg =
-  | { wasm: { execute: Execute } }
-  | { wasm: { instantiate: Instantiate } };
+    | { wasm: { execute: Execute } }
+    | { wasm: { instantiate: Instantiate } };
 
 export class WasmModule {
   public lastCodeId: number;
   public lastInstanceId: number;
 
   constructor(public chain: CWSimulateApp) {
-    chain.store.set('wasm', { codes: {}, contracts: {}, contractStorage: {} });
+    chain.store.set('wasm', {codes: {}, contracts: {}, contractStorage: {}});
 
     this.lastCodeId = 0;
     this.lastInstanceId = 0;
@@ -88,8 +87,8 @@ export class WasmModule {
     };
 
     this.chain.store = this.chain.store.setIn(
-      ['wasm', 'codes', this.lastCodeId + 1],
-      codeInfo
+        ['wasm', 'codes', this.lastCodeId + 1],
+        codeInfo
     );
     this.lastCodeId += 1;
     return this.lastCodeId;
@@ -110,13 +109,13 @@ export class WasmModule {
 
   async buildVM(contractAddress: string): Promise<VMInstance> {
     // @ts-ignore
-    let { codeId } = this.chain.store.getIn([
+    let {codeId} = this.chain.store.getIn([
       'wasm',
       'contracts',
       contractAddress,
     ]);
     // @ts-ignore
-    let { wasmCode } = this.chain.store.getIn(['wasm', 'codes', codeId]);
+    let {wasmCode} = this.chain.store.getIn(['wasm', 'codes', codeId]);
 
     let backend: IBackend = {
       backend_api: new BasicBackendApi(this.chain.bech32Prefix),
@@ -135,21 +134,21 @@ export class WasmModule {
   }
 
   async instantiate(
-    sender: string,
-    funds: Coin[],
-    codeId: number,
-    instantiateMsg: any
+      sender: string,
+      funds: Coin[],
+      codeId: number,
+      instantiateMsg: any
   ): Promise<any> {
     // TODO: add funds logic
 
     const contractAddressHash = WasmModule.buildContractAddress(
-      codeId,
-      this.lastInstanceId + 1
+        codeId,
+        this.lastInstanceId + 1
     );
 
     const contractAddress = toBech32(
-      this.chain.bech32Prefix,
-      contractAddressHash
+        this.chain.bech32Prefix,
+        contractAddressHash
     );
 
     const contractInfo = {
@@ -161,22 +160,22 @@ export class WasmModule {
     };
 
     this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contracts', contractAddress],
-      contractInfo
+        ['wasm', 'contracts', contractAddress],
+        contractInfo
     );
     this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
-      new BasicKVIterStorage()
+        ['wasm', 'contractStorage', contractAddress],
+        new BasicKVIterStorage()
     );
     this.lastInstanceId += 1;
 
     let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
-    let info = { sender, funds };
+    let info = {sender, funds};
 
     let res = vm.instantiate(env, info, instantiateMsg)
-      .json as RustResult<ContractResponse.Data>;
+        .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       let response = await this.handleContractResponse(contractAddress, res.ok);
       return {
@@ -189,10 +188,10 @@ export class WasmModule {
   }
 
   async execute(
-    sender: string,
-    funds: Coin[],
-    contractAddress: string,
-    executeMsg: any
+      sender: string,
+      funds: Coin[],
+      contractAddress: string,
+      executeMsg: any
   ): Promise<Result<AppResponse, string>> {
     let contractInfo = this.chain.store.getIn([
       'wasm',
@@ -200,18 +199,18 @@ export class WasmModule {
       contractAddress,
     ]);
     if (contractInfo === undefined) {
-      throw new Error(`Contract ${contractAddress} does not exist`);
+      return Err(`Contract ${contractAddress} not found`);
     }
 
     let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
-    let info = { sender, funds };
+    let info = {sender, funds};
 
     let snapshot = this.chain.store;
 
     let res = vm.execute(env, info, executeMsg)
-      .json as RustResult<ContractResponse.Data>;
+        .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       return await this.handleContractResponse(contractAddress, res.ok);
     } else {
@@ -221,10 +220,10 @@ export class WasmModule {
   }
 
   async handleContractResponse(
-    contractAddress: string,
-    res: ContractResponse.Data
+      contractAddress: string,
+      res: ContractResponse.Data
   ): Promise<Result<AppResponse, string>> {
-    let { messages, events, attributes, data } = res;
+    let {messages, events, attributes, data} = res;
     let snapshot = this.chain.store;
     let contractStorage = this.chain.store.getIn([
       'wasm',
@@ -239,8 +238,8 @@ export class WasmModule {
       if (subres.err) {
         this.chain.store = snapshot;
         this.chain.store = this.chain.store.setIn(
-          ['wasm', 'contractStorage', contractAddress],
-          contractSnapshot
+            ['wasm', 'contractStorage', contractAddress],
+            contractSnapshot
         );
         return subres;
       } else {
@@ -251,18 +250,18 @@ export class WasmModule {
       }
     }
 
-    return Ok({ events, data });
+    return Ok({events, data});
   }
 
   async executeSubmsg(
-    contractAddress: string,
-    message: SubMsg.Data
+      contractAddress: string,
+      message: SubMsg.Data
   ): Promise<Result<AppResponse, string>> {
-    let { id, msg, gas_limit, reply_on } = message;
+    let {id, msg, gas_limit, reply_on} = message;
     let r = await this.chain.handleMsg(contractAddress, msg);
     if (r.ok) {
       // submessage success
-      let { events, data } = r.val;
+      let {events, data} = r.val;
       if (reply_on === 'success' || reply_on === 'always') {
         // submessage success, call reply
         let replyMsg = {
@@ -289,7 +288,7 @@ export class WasmModule {
         // submessage success, don't call reply
         data = null;
       }
-      return Ok({ events, data });
+      return Ok({events, data});
     } else {
       // submessage failed
       if (reply_on === 'error' || reply_on === 'always') {
@@ -306,8 +305,8 @@ export class WasmModule {
           return replyRes;
         } else {
           // submessage failed, call reply, reply success
-          let { events, data } = replyRes.val;
-          return Ok({ events, data });
+          let {events, data} = replyRes.val;
+          return Ok({events, data});
         }
       } else {
         // submessage failed, don't call reply (equivalent to normal message)
@@ -317,12 +316,12 @@ export class WasmModule {
   }
 
   async reply(
-    contractAddress: string,
-    replyMsg: any
+      contractAddress: string,
+      replyMsg: any
   ): Promise<Result<AppResponse, string>> {
     let vm = await this.buildVM(contractAddress);
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
-      .json as RustResult<ContractResponse.Data>;
+        .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       // handle response
       return await this.handleContractResponse(contractAddress, res.ok);
@@ -332,8 +331,8 @@ export class WasmModule {
   }
 
   async query(
-    contractAddress: string,
-    queryMsg: any
+      contractAddress: string,
+      queryMsg: any
   ): Promise<Result<any, string>> {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
@@ -347,23 +346,30 @@ export class WasmModule {
   }
 
   async handleMsg(
-    sender: string,
-    msg: any
+      sender: string,
+      msg: any
   ): Promise<Result<AppResponse, string>> {
-    let { wasm } = msg;
+    let {wasm} = msg;
     if ('execute' in wasm) {
-      let { contract_addr, funds, msg } = wasm.execute;
+      let {contract_addr, funds, msg} = wasm.execute;
       let msgJSON = fromUtf8(fromBase64(msg));
       return await this.execute(
-        sender,
-        funds,
-        contract_addr,
-        JSON.parse(msgJSON)
+          sender,
+          funds,
+          contract_addr,
+          JSON.parse(msgJSON)
       );
     } else if ('instantiate' in wasm.instantiate) {
-      throw new Error('unimplemented');
+      let {code_id, funds, msg} = wasm.instantiate;
+      let msgJSON = fromUtf8(fromBase64(msg));
+      return await this.instantiate(
+          sender,
+          funds,
+          code_id,
+          JSON.parse(msgJSON)
+      );
     } else {
-      throw new Error('Unknown wasm message');
+      return Err('Invalid wasm message');
     }
   }
 }
