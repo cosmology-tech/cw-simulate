@@ -28,57 +28,44 @@ $ yarn add @terran-one/cw-simulate
 
 ## Usage
 
-1. Create a `Simulation` object - this is the global simulation environment where one or more chains can be described.
-2. Create and register your `App` instances against the `Simulation` object, which describe chain-specific configurations.
-3. As needed, per chain:
-   - Upload the WASM bytecode using `App.storeCode()`. This will register a new `codeId` to reference the uploaded contract code.
-   - Create a new contract instance using `App.createInstance()` and passing in the `codeId` generated in the previous step. This results in a `contractAddress` to refer to the contract instance.
-  - Run `instantiate` on the instance -- the contract's `instantiate` entrypoint.
+1. Create a `CWSimulateApp` object - this is a simulation environment describing a single chains.
+2. As needed, per chain:
+   - Upload the WASM bytecode using `App.wasm.create()`. This will register a new `codeId` to reference the uploaded contract code.
+   - Create a new contract instance using `App.wasm.instantiateContract()` and passing in the `codeId` generated in the previous step.
+   - From the response, retrieve the `contractAddress` to refer to the contract instance.
   - You can now run `execute` and `query` messages against the instance, and they should work as expected.
 ### Example
 
-The following example creates 2 chains, instantiates a contract on one of the chains, and performs an `execute` and `query`.
+The following example creates a chain, instantiates a contract on it, and performs an `execute` and `query`.
 
-```typescript
-import { Simulation } from 'cw-simulate';
+```javascript
+import { CWSimulateApp } from '@terran-one/cw-simulate';
 import { readFileSync } from 'fs';
 
-const env = new Simulation();
+const sender = 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu';
+const funds = [];
+const wasmBytecode = readFileSync('cw-template.wasm');
 
-// create first chain
-const chain1 = env.createChain({
+const app = new CWSimulateApp({
   chainId: 'phoenix-1',
   bech32Prefix: 'terra'
 });
 
-// create second chain
-const chain2 = env.createChain({
-  chainId: 'juno-1',
-  bech32Prefix: 'juno'
-});
-
-const wasmBytecode = readFileSync('cw-template.wasm');
-
-const code = chain1.storeCode(wasmBytecode);
-const instance = await chain1.instantiateContract(code.codeId);
-
-const info = {
-  sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-  funds: []
-};
-
-// get contract address
-console.log(instance.contractAddress);
+// import the wasm bytecode
+const codeId = app.wasm.create(sender, wasmBytecode);
 
 // instantiate the contract
-let result = instance.instantiate(info, { count: 0 });
-console.log(result);
+let result = await app.wasm.instantiateContract(sender, funds, codeId, { count: 0 });
+console.log('instantiateContract:', result.constructor.name, JSON.stringify(result, null, 2));
+
+// pull out the contract address
+const contractAddress = result.val.events[0].attributes[0].value;
 
 // execute the contract
-result = instance.execute(info, { increment: {} });
-console.log(result);
+result = await app.wasm.executeContract(sender, funds, contractAddress, { increment: {} });
+console.log('executeContract:', result.constructor.name, JSON.stringify(result, null, 2));
 
 // query the contract
-result = instance.query({ get_count: {} });
-console.log(result);
+result = await app.wasm.query(contractAddress, { get_count: {} });
+console.log('query:', result.constructor.name, JSON.stringify(result, null, 2));
 ```
