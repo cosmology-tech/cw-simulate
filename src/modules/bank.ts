@@ -28,7 +28,7 @@ export class BankModule {
   public handleMsg(sender: string, msg: any): AppResponse {
     let bankMsg = msg.bank;
     if (bankMsg.send) {
-      this.send(sender, bankMsg.send.recipient, bankMsg.send.amount);
+      let res = this.send(sender, bankMsg.send.recipient, bankMsg.send.amount);
       return {
         events: [],
         data: null,

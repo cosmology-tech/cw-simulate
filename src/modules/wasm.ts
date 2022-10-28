@@ -11,6 +11,7 @@ import {
 import { ContractResponse, RustResult, SubMsg } from '../cw-interface';
 import { Map } from 'immutable';
 import { Result, Ok, Err } from 'ts-results';
+import { App } from 'telescope/tendermint/version/types';
 
 export interface AppResponse {
   events: any[];
@@ -134,14 +135,8 @@ export class WasmModule {
     return vm;
   }
 
-  async instantiate(
-    sender: string,
-    funds: Coin[],
-    codeId: number,
-    instantiateMsg: any
-  ): Promise<any> {
-    // TODO: add funds logic
-
+  // TODO: add admin, label, etc.
+  registerContractInstance(sender: string, codeId: number): string {
     const contractAddressHash = WasmModule.buildContractAddress(
       codeId,
       this.lastInstanceId + 1
@@ -169,62 +164,120 @@ export class WasmModule {
       new BasicKVIterStorage()
     );
     this.lastInstanceId += 1;
+    return contractAddress;
+  }
 
+  async callInstantiate(
+    sender: string,
+    funds: Coin[],
+    contractAddress: string,
+    instantiateMsg: any
+  ): Promise<RustResult<ContractResponse.Data>> {
+    let vm = await this.buildVM(contractAddress);
+    let env = this.getExecutionEnv(contractAddress);
+    let info = { sender, funds };
+
+    return vm.instantiate(env, info, instantiateMsg)
+      .json as RustResult<ContractResponse.Data>;
+  }
+
+  async instantiateContract(
+    sender: string,
+    funds: Coin[],
+    codeId: number,
+    instantiateMsg: any
+  ): Promise<Result<AppResponse, string>> {
+    // first register the contract instance
+    const contractAddress = await this.registerContractInstance(sender, codeId);
+
+    // then call instantiate
+    let response = await this.callInstantiate(
+      sender,
+      funds,
+      contractAddress,
+      instantiateMsg
+    );
+
+    if ('error' in response) {
+      return Err(response.error);
+    } else {
+      let customEvent = {
+        type: 'instantiate',
+        attributes: [
+          { key: '_contract_address', value: contractAddress },
+          { key: 'code_id', value: codeId.toString() },
+        ],
+      };
+      let res = this.buildAppResponse(
+        contractAddress,
+        customEvent,
+        response.ok
+      );
+      return await this.handleContractResponse(
+        contractAddress,
+        response.ok.messages,
+        res
+      );
+    }
+  }
+
+  async callExecute(
+    sender: string,
+    funds: Coin[],
+    contractAddress: string,
+    executeMsg: any
+  ): Promise<RustResult<ContractResponse.Data>> {
     let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
-    let res = vm.instantiate(env, info, instantiateMsg)
+    return vm.execute(env, info, executeMsg)
       .json as RustResult<ContractResponse.Data>;
-    if ('ok' in res) {
-      let response = await this.handleContractResponse(contractAddress, res.ok);
-      return {
-        contractAddress,
-        response,
-      };
-    } else {
-      return res;
-    }
   }
 
-  async execute(
+  async executeContract(
     sender: string,
     funds: Coin[],
     contractAddress: string,
     executeMsg: any
   ): Promise<Result<AppResponse, string>> {
-    let contractInfo = this.chain.store.getIn([
-      'wasm',
-      'contracts',
+    let response = await this.callExecute(
+      sender,
+      funds,
       contractAddress,
-    ]);
-    if (contractInfo === undefined) {
-      throw new Error(`Contract ${contractAddress} does not exist`);
-    }
-
-    let vm = await this.buildVM(contractAddress);
-
-    let env = this.getExecutionEnv(contractAddress);
-    let info = { sender, funds };
-
-    let snapshot = this.chain.store;
-
-    let res = vm.execute(env, info, executeMsg)
-      .json as RustResult<ContractResponse.Data>;
-    if ('ok' in res) {
-      return await this.handleContractResponse(contractAddress, res.ok);
+      executeMsg
+    );
+    if ('error' in response) {
+      return Err(response.error);
     } else {
-      this.chain.store = snapshot;
-      return Err(res.error);
+      let customEvent = {
+        type: 'execute',
+        attributes: [
+          {
+            key: '_contract_addr',
+            value: contractAddress,
+          },
+        ],
+      };
+      let res = this.buildAppResponse(
+        contractAddress,
+        customEvent,
+        response.ok
+      );
+      return await this.handleContractResponse(
+        contractAddress,
+        response.ok.messages,
+        res
+      );
     }
   }
 
   async handleContractResponse(
     contractAddress: string,
-    res: ContractResponse.Data
+    messages: ContractResponse.Data['messages'],
+    res: AppResponse
   ): Promise<Result<AppResponse, string>> {
-    let { messages, events, attributes, data } = res;
     let snapshot = this.chain.store;
     let contractStorage = this.chain.store.getIn([
       'wasm',
@@ -244,14 +297,14 @@ export class WasmModule {
         );
         return subres;
       } else {
-        events = [...events, ...subres.val.events];
+        res.events = [...res.events, ...subres.val.events];
         if (subres.val.data === null) {
-          data = subres.val.data;
+          res.data = subres.val.data;
         }
       }
     }
 
-    return Ok({ events, data });
+    return Ok({ events: res.events, data: res.data });
   }
 
   async executeSubmsg(
@@ -325,7 +378,8 @@ export class WasmModule {
       .json as RustResult<ContractResponse.Data>;
     if ('ok' in res) {
       // handle response
-      return await this.handleContractResponse(contractAddress, res.ok);
+      throw new Error('Not implemented');
+      // return await this.handleContractResponse(contractAddress, res.ok);
     } else {
       return Err(res.error);
     }
@@ -346,6 +400,43 @@ export class WasmModule {
     }
   }
 
+  buildAppResponse(
+    contract: string,
+    customEvent: any,
+    response: ContractResponse.Data
+  ): AppResponse {
+    let appEvents = [];
+    // add custom event
+    appEvents.push(customEvent);
+
+    // add contract attributes under `wasm` event type
+    if (response.attributes.length > 0) {
+      appEvents.push({
+        type: 'wasm',
+        attributes: [
+          {
+            key: '_contract_addr',
+            value: contract,
+          },
+          ...response.attributes,
+        ],
+      });
+    }
+
+    // add events and prefix with `wasm-`
+    for (const event of response.events) {
+      appEvents.push({
+        type: `wasm-${event.type}`,
+        attributes: event.attributes,
+      });
+    }
+
+    return {
+      events: appEvents,
+      data: response.data,
+    };
+  }
+
   async handleMsg(
     sender: string,
     msg: any
@@ -354,13 +445,13 @@ export class WasmModule {
     if ('execute' in wasm) {
       let { contract_addr, funds, msg } = wasm.execute;
       let msgJSON = fromUtf8(fromBase64(msg));
-      return await this.execute(
+      return await this.executeContract(
         sender,
         funds,
         contract_addr,
         JSON.parse(msgJSON)
       );
-    } else if ('instantiate' in wasm.instantiate) {
+    } else if ('instantiate' in wasm) {
       throw new Error('unimplemented');
     } else {
       throw new Error('Unknown wasm message');
