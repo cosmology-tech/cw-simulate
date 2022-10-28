@@ -1,6 +1,10 @@
 name: Publish package to GitHub Packages
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version'
+        required: true
   release:
     types: [created]
 jobs:
@@ -10,7 +14,27 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PACKAGE_PAT }}
+      - name: Bump version
+        id: bump-version
+        env:
+          TOKEN_FOR_GITHUB: ${{ secrets.PACKAGE_PAT }}
+        run: |
+          YARN_VERSION_GIT_TAG='' yarn version --patch
+          NEW_VERSION=${{ github.event.release.tag_name }}
+          if [ -z $NEW_VERSION ]; then
+            NEW_VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "::set-output name=version::$NEW_VERSION"
+      - name: Pull Remote Changes
+        run: git pull --autostash
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        name: Commit & Push
+        with:
+          commit_message: Bumped version to ${{ steps.bump-version.outputs.version }}"
       - uses: actions/setup-node@v3
         with:
           node-version: '14.x'
