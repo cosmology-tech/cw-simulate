@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { CWSimulateApp } from './CWSimulateApp';
-import { Event } from './cw-interface';
+import { AppResponse, Event } from './cw-interface';
+import { Result } from 'ts-results';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
@@ -100,6 +101,10 @@ function event(ty: string, attrs: [string, string][]): Event.Data {
   };
 }
 
+function getContractAddress(res: AppResponse): string {
+  return res.events[0].attributes[0].value;
+}
+
 const app = new CWSimulateApp({
   chainId: 'phoenix-1',
   bech32Prefix: 'terra',
@@ -113,7 +118,9 @@ let info = {
 const codeId = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
 
 describe('Events', function () {
-  it('single event, no attributes', async () => {
+  let contractAddress: string;
+
+  beforeEach(async () => {
     let res = await app.wasm.instantiateContract(
       info.sender,
       info.funds,
@@ -122,50 +129,255 @@ describe('Events', function () {
     );
     if (res.err) {
       throw new Error(res.val);
-    } else {
-      console.log(JSON.stringify(res.val));
     }
-    // let executeMsg = run(
-    //   ev('EV1', [
-    //     ['EV1-K1', 'EV1-V1'],
-    //     ['EV1-K2', 'EV1-V2'],
-    //   ]),
-    //   ev('EV2', [
-    //     ['EV2-K1', 'EV2-V1'],
-    //     ['EV2-K2', 'EV2-V2'],
-    //   ]),
-    //   attr('A1-K', 'A1-V'),
-    //   attr('A2-K', 'A2-V')
-    // );
-    //
-    // res = await app.wasm.executeContract(
-    //   info.sender,
-    //   info.funds,
-    //   contractAddress,
-    //   executeMsg
-    // );
-    //
-    // expect(res.val).toEqual({
-    //   events: [
-    //     event('execute', [['_contract_addr', contractAddress]]),
-    //     event('wasm', [
-    //       ['_contract_addr', contractAddress],
-    //       ['A1-K', 'A1-V'],
-    //       ['A2-K', 'A2-V'],
-    //     ]),
-    //     event('wasm-EV1', [
-    //       ['EV1-K1', 'EV1-V1'],
-    //       ['EV1-K2', 'EV1-V2'],
-    //     ]),
-    //     event('wasm-EV2', [
-    //       ['EV2-K1', 'EV2-V1'],
-    //       ['EV2-K2', 'EV2-V2'],
-    //     ]),
-    //   ],
-    //   data: null,
-    // });
-    //
-    // res = await app.wasm.query(contractAddress, { get_buffer: {} });
-    // console.log(res);
+    contractAddress = getContractAddress(res.val);
+  });
+
+  it('attributes get added to `wasm` event and events are prefixed with `wasm-`', async () => {
+    let executeMsg = run(
+      ev('EV1', [
+        ['EV1-K1', 'EV1-V1'],
+        ['EV1-K2', 'EV1-V2'],
+      ]),
+      ev('EV2', [
+        ['EV2-K1', 'EV2-V1'],
+        ['EV2-K2', 'EV2-V2'],
+      ]),
+      attr('A1-K', 'A1-V'),
+      attr('A2-K', 'A2-V')
+    );
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    expect(res.val).toEqual({
+      events: [
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('wasm', [
+          ['_contract_addr', contractAddress],
+          ['A1-K', 'A1-V'],
+          ['A2-K', 'A2-V'],
+        ]),
+        event('wasm-EV1', [
+          ['EV1-K1', 'EV1-V1'],
+          ['EV1-K2', 'EV1-V2'],
+        ]),
+        event('wasm-EV2', [
+          ['EV2-K1', 'EV2-V1'],
+          ['EV2-K2', 'EV2-V2'],
+        ]),
+      ],
+      data: null,
+    });
+  });
+
+  it('submessages and replies', async () => {
+    let executeMsg = run(
+      sub(1, run(msg(push('N1'))), ReplyOn.SUCCESS),
+      sub(2, run(err('error-S2')), ReplyOn.ERROR)
+    );
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    expect(res.val).toEqual({
+      data: null,
+      events: [
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('wasm-push', [
+          ['_contract_addr', contractAddress],
+          ['key', 'value'],
+        ]),
+        event('reply', [
+          ['_contract_addr', contractAddress],
+          ['mode', 'handle_success'],
+        ]),
+        event('wasm-reply_id', [
+          ['_contract_addr', contractAddress],
+          ['key1', 'value1'],
+        ]),
+        event('reply', [
+          ['_contract_addr', contractAddress],
+          ['mode', 'handle_failure'],
+        ]),
+        event('wasm-reply_inv', [
+          ['_contract_addr', contractAddress],
+          ['err', 'custom: error-S2'],
+        ]),
+      ],
+    });
+  });
+
+  it('nested submessages', async () => {
+    let executeMsg = run(
+      sub(1, run(msg(push('N1'))), ReplyOn.SUCCESS),
+      sub(
+        1,
+        run(sub(1, run(msg(push('N2'))), ReplyOn.SUCCESS)),
+        ReplyOn.SUCCESS
+      )
+    );
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    expect(res.val).toEqual({
+      data: null,
+      events: [
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('wasm-push', [
+          ['_contract_addr', contractAddress],
+          ['key', 'value'],
+        ]),
+        event('reply', [
+          ['_contract_addr', contractAddress],
+          ['mode', 'handle_success'],
+        ]),
+        event('wasm-reply_id', [
+          ['_contract_addr', contractAddress],
+          ['key1', 'value1'],
+        ]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', contractAddress]]),
+        event('wasm-push', [
+          ['_contract_addr', contractAddress],
+          ['key', 'value'],
+        ]),
+        event('reply', [
+          ['_contract_addr', contractAddress],
+          ['mode', 'handle_success'],
+        ]),
+        event('wasm-reply_id', [
+          ['_contract_addr', contractAddress],
+          ['key1', 'value1'],
+        ]),
+        event('reply', [
+          ['_contract_addr', contractAddress],
+          ['mode', 'handle_success'],
+        ]),
+        event('wasm-reply_id', [
+          ['_contract_addr', contractAddress],
+          ['key1', 'value1'],
+        ]),
+      ],
+    });
+  });
+});
+
+describe('Rollback', function () {
+  let contractAddress: string;
+
+  beforeEach(async () => {
+    let res = await app.wasm.instantiateContract(
+      info.sender,
+      info.funds,
+      codeId,
+      {}
+    );
+    if (res.err) {
+      throw new Error(res.val);
+    }
+    contractAddress = getContractAddress(res.val);
+  });
+
+  it('control case', async () => {
+    let executeMsg = run(msg(push('A')), msg(push('B')));
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    expect(queryRes.val).toEqual({
+      buffer: ['A', 'B'],
+    });
+  });
+
+  it('rollbacks if message fails', async () => {
+    let executeMsg = run(msg(push('A')), msg(push('B')), err('error'));
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    expect(queryRes.val).toEqual({
+      buffer: [],
+    });
+  });
+
+  it('partial rollback - submessages', async () => {
+    let executeMsg = run(
+      msg(push('A')),
+      sub(2, run(msg(push('B')), msg(push('C')), err('error')), ReplyOn.ERROR),
+      msg(push('D'))
+    );
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    expect(queryRes.val).toEqual({
+      buffer: ['A', 'D'],
+    });
+  });
+
+  it('partial rollback - nested submessages', async () => {
+    let executeMsg = run(
+      msg(push('A')),
+      sub(
+        1,
+        run(
+          msg(push('B')),
+          sub(
+            2,
+            run(msg(push('C')), msg(push('D')), err('error')),
+            ReplyOn.ERROR
+          ),
+          msg(push('E'))
+        ),
+        ReplyOn.SUCCESS
+      ),
+      msg(push('F'))
+    );
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    expect(queryRes.val).toEqual({
+      buffer: ['A', 'B', 'E', 'F'],
+    });
   });
 });
