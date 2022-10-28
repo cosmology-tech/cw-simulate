@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { AppResponse, Event } from '../cw-interface';
 import { Result } from 'ts-results';
+import { toBase64 } from '@cosmjs/encoding';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
@@ -381,5 +382,48 @@ describe('Rollback', function () {
     expect(queryRes.val).toEqual({
       buffer: ['A', 'B', 'E', 'F'],
     });
+  });
+});
+
+describe('Data', () => {
+  let contractAddress: string;
+
+  beforeEach(async () => {
+    let res = await app.wasm.instantiateContract(
+      info.sender,
+      info.funds,
+      codeId,
+      {}
+    );
+    if (res.err) {
+      throw new Error(res.val);
+    }
+    contractAddress = getContractAddress(res.val);
+  });
+
+  it('control case', async () => {
+    let executeMsg = run(data([1]));
+
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg
+    );
+
+    expect(res.val).toMatchObject({
+      data: toBase64(new Uint8Array([1])),
+    });
+  });
+
+  it('last msg data is returned', async () => {
+    // TODO: implement; this requires changing cw-simulate-tests in Rust :P
+    // it may be tricky because outermost data is returned, so we may need to make
+    // new ExecuteMsg types that don't overwrite at the root level instead of
+    // a command-processor
+  });
+
+  it('if reply has no data, last data is used', async () => {
+    // TODO: implement
   });
 });
