@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
-import { CWSimulateApp } from './CWSimulateApp';
-import { AppResponse, Event } from './cw-interface';
+import { CWSimulateApp } from '../CWSimulateApp';
+import { AppResponse, Event } from '../cw-interface';
 import { Result } from 'ts-results';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
@@ -163,10 +163,12 @@ describe('Events', function () {
           ['A2-K', 'A2-V'],
         ]),
         event('wasm-EV1', [
+          ['_contract_addr', contractAddress],
           ['EV1-K1', 'EV1-V1'],
           ['EV1-K2', 'EV1-V2'],
         ]),
         event('wasm-EV2', [
+          ['_contract_addr', contractAddress],
           ['EV2-K1', 'EV2-V1'],
           ['EV2-K2', 'EV2-V2'],
         ]),
