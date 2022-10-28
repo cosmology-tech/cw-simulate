@@ -1,4 +1,5 @@
-name: Publish package to GitHub Packages
+name: Publish package to npm
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,17 +8,20 @@ on:
         required: true
   release:
     types: [created]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Update version
+      - name: Bump version
         run: |
           YARN_VERSION_GIT_TAG='' yarn version --patch
           NEW_VERSION=${{ github.event.release.tag_name }}
@@ -46,4 +50,5 @@ jobs:
 
       - name: Build and publish
         run: yarn build && yarn publish
+        env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
