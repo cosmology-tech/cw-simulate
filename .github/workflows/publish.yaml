@@ -20,14 +20,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Bump version
+      - name: Update version
         run: |
-          YARN_VERSION_GIT_TAG='' yarn version --patch
-          NEW_VERSION=${{ github.event.release.tag_name }}
+          export NEW_VERSION=${{ github.event.release.tag_name }}
           if [ -z $NEW_VERSION ]; then
-            NEW_VERSION=${{ github.event.inputs.version }}
+            export NEW_VERSIONNEW_VERSION=${{ github.event.inputs.version }}
           fi
-          echo "::set-output name=version::$NEW_VERSION"
+
+          yarn version --new-version $NEW_VERSION
 
       - name: Pull Remote Changes
         run: git pull --autostash
@@ -35,7 +35,7 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v4
         name: Commit & Push
         with:
-          commit_message: Bumped version to ${{ steps.bump-version.outputs.version }}"
+          commit_message: Updated version to $NEW_VERSION
 
       - uses: actions/setup-node@v3
         name: Set up node
