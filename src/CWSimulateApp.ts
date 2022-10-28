@@ -39,7 +39,7 @@ export class CWSimulateApp {
     if ('wasm' in msg) {
       return await this.wasm.handleMsg(sender, msg, trace);
     } else if ('bank' in msg) {
-      return await this.bank.handleMsg(sender, msg);
+      return await this.bank.handleMsg(sender, msg.bank);
     } else {
       return Err(`unknown message: ${JSON.stringify(msg)}`);
     }

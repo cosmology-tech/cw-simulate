@@ -1,12 +1,25 @@
 import { toAscii } from '@cosmjs/encoding';
 import { CWSimulateApp } from 'CWSimulateApp';
-import { Ok, Result } from 'ts-results';
+import { Err, Ok, Result } from 'ts-results';
 import { Coin } from '@cosmjs/amino';
 
 export interface AppResponse {
   events: any[];
   data: string | null;
 }
+
+export type BankMessage =
+  | {
+      send: {
+        to_address: string;
+        amount: Coin[];
+      }
+    }
+  | {
+      burn: {
+        amount: Coin[];
+      }
+    }
 
 export class BankModule {
   public static STORE_KEY: Uint8Array = toAscii('bank');
@@ -15,72 +28,63 @@ export class BankModule {
     this.chain.store.set('bank', {'balances': {}});
   }
 
-  public send(sender: string, recipient: string, amount: Coin[]) {
-    let senderBalance: Coin[] = this.getBalance(sender);
-    amount.forEach((coin: Coin) => {
-      // Check if sender has coin.denom
-      const hasCoin = senderBalance.find((c: Coin) => c.denom === coin.denom);
-      if (hasCoin) {
-        // Check if sender has enough balance
-        if (parseInt(hasCoin.amount) >= parseInt(coin.amount)) {
-          const newCoin = {
-            denom: coin.denom,
-            amount: (parseInt(hasCoin.amount) - parseInt(coin.amount)).toString(),
-          }
-          const deleteIndex = senderBalance.findIndex((c: Coin) => c.denom === coin.denom);
-          delete senderBalance[deleteIndex];
-          senderBalance.push(newCoin);
-          this.setBalance(sender, senderBalance);
-        } else {
-          // rollback
-          throw new Error(`Sender ${sender} does not have enough balance`);
-        }
-      } else {
-        throw new Error(`Sender ${sender} does not have ${coin.denom} coin`);
+  public send(sender: string, recipient: string, amount: Coin[]): Result<void, string> {
+    let senderBalance = this.getBalance(sender).filter(c => c.amount > BigInt(0));
+    let parsedCoins = amount
+      .map(ParsedCoin.fromCoin)
+      .filter(c => c.amount > BigInt(0));
+
+    // Deduct coins from sender
+    for (const coin of parsedCoins) {
+      const hasCoin = senderBalance.find(c => c.denom === coin.denom);
+      
+      if (hasCoin && hasCoin.amount >= coin.amount) {
+        hasCoin.amount -= coin.amount;
       }
-    });
+      else {
+        return Err(`Sender ${sender} has ${hasCoin?.amount ?? BigInt(0)} ${coin.denom}, needs ${coin.amount}`);
+      }
+    }
+    senderBalance = senderBalance.filter(c => c.amount === BigInt(0));
 
     // Add amount to recipient
     const recipientBalance = this.getBalance(recipient);
-    amount.forEach((coin: Coin) => {
-      const hasCoin = recipientBalance.find((c: Coin) => c.denom === coin.denom);
+    for (const coin of parsedCoins) {
+      const hasCoin = recipientBalance.find(c => c.denom === coin.denom);
+      
       if (hasCoin) {
-        const newCoin = {
-          denom: coin.denom,
-          amount: (parseInt(hasCoin.amount) + parseInt(coin.amount)).toString(),
-        }
-        const deleteIndex = recipientBalance.findIndex((c: Coin) => c.denom === coin.denom);
-        delete recipientBalance[deleteIndex];
-        recipientBalance.push(newCoin);
-        this.setBalance(recipient, recipientBalance);
-      } else {
-        recipientBalance.push(coin);
-        this.setBalance(recipient, recipientBalance);
+        hasCoin.amount += coin.amount;
       }
-    });
+      else {
+        recipientBalance.push(coin);
+      }
+    }
+
+    this.setBalance(sender, senderBalance.map(c => c.toCoin()));
+    this.setBalance(recipient, recipientBalance.map(c => c.toCoin()));
+    return Ok(undefined);
   }
 
-  public burn(from_address: string, amount: Coin[]) {
-    let balance = this.getBalance(from_address);
-    amount.forEach((coin: Coin) => {
-      const hasCoin = balance.find((c: Coin) => c.denom === coin.denom);
-      if (hasCoin) {
-        if (parseInt(hasCoin.amount) >= parseInt(coin.amount)) {
-          const newCoin = {
-            denom: coin.denom,
-            amount: (parseInt(hasCoin.amount) - parseInt(coin.amount)).toString(),
-          }
-          const deleteIndex = balance.findIndex((c: Coin) => c.denom === coin.denom);
-          delete balance[deleteIndex];
-          balance.push(newCoin);
-          this.setBalance(from_address, balance);
-        } else {
-          throw new Error(`Sender ${from_address} does not have enough balance`);
-        }
-      } else {
-        throw new Error(`Sender ${from_address} does not have ${coin.denom} coin`);
+  public burn(sender: string, amount: Coin[]): Result<void, string> {
+    let balance = this.getBalance(sender);
+    let parsedCoins = amount
+      .map(ParsedCoin.fromCoin)
+      .filter(c => c.amount > BigInt(0));
+
+    for (const coin of parsedCoins) {
+      const hasCoin = balance.find(c => c.denom === coin.denom);
+      
+      if (hasCoin && hasCoin.amount >= coin.amount) {
+        hasCoin.amount -= coin.amount;
       }
-    });
+      else {
+        return Err(`Sender ${sender} has ${hasCoin?.amount ?? 0} ${coin.denom}, needs ${coin.amount}`);
+      }
+    }
+    balance = balance.filter(c => c.amount > BigInt(0));
+    
+    this.setBalance(sender, balance.map(c => c.toCoin()));
+    return Ok(undefined);
   }
 
   public setBalance(address: string, amount: Coin[]) {
@@ -90,33 +94,48 @@ export class BankModule {
     );
   }
 
-  public getBalance(address: string): Coin[] {
-    return this.chain.store.getIn(['bank', 'balances', address], []) as Coin[];
+  public getBalance(address: string): ParsedCoin[] {
+    return (this.chain.store.getIn(['bank', 'balances', address], []) as Coin[]).map(ParsedCoin.fromCoin);
   }
 
   public async handleMsg(
       sender: string,
-      msg: any
+      msg: BankMessage,
   ): Promise<Result<AppResponse, string>> {
-    let bankMsg = msg.bank;
-    if (bankMsg.send) {
-      this.send(sender, bankMsg.send.to_address, bankMsg.send.amount);
-      return Ok({
+    if ('send' in msg) {
+      const result = this.send(sender, msg.send.to_address, msg.send.amount);
+      return result.andThen(() => Ok<AppResponse>({
         events: [
           {
             type: 'transfer',
             attributes: [
-              {key: 'recipient', value: bankMsg.send.to_address},
+              {key: 'recipient', value: msg.send.to_address},
               {key: 'sender', value: sender},
-              {key: 'amount', value: JSON.stringify(bankMsg.send.amount)},
+              {key: 'amount', value: JSON.stringify(msg.send.amount)},
             ],
           },
         ],
         data: null,
-      });
+      }));
     }
-
-    throw new Error('Unknown bank message');
+    else if ('burn' in msg) {
+      const result = this.burn(sender, msg.burn.amount);
+      return result.andThen(() => Ok<AppResponse>({
+        events: [
+          {
+            type: 'burn',
+            attributes: [
+              {key: 'sender', value: sender},
+              {key: 'amount', value: JSON.stringify(msg.burn.amount)},
+            ],
+          },
+        ],
+        data: null,
+      }));
+    }
+    else {
+      return Err('Unknown bank message');
+    }
   }
 
   public handleQuery(query: any) {
@@ -136,5 +155,21 @@ export class BankModule {
     }
 
     throw new Error('Unknown bank query');
+  }
+}
+
+/** Essentially a `Coin`, but the `amount` is a `bigint` for more convenient use. */
+class ParsedCoin {
+  constructor(public readonly denom: string, public amount: bigint) {}
+  
+  toCoin(): Coin {
+    return {
+      denom: this.denom,
+      amount: this.amount.toString(),
+    };
+  }
+  
+  static fromCoin(coin: Coin) {
+    return new ParsedCoin(coin.denom, BigInt(coin.amount));
   }
 }
