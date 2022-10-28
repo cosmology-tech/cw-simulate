@@ -37,9 +37,7 @@ jobs:
       - uses: actions/setup-node@v3
         name: Set up node
         with:
-          node-version: '14.x'
-          registry-url: 'https://npm.pkg.github.com'
-          always-auth: true
+          node-version: '16.x'
 
       - name: Install dependencies
         run: yarn install
