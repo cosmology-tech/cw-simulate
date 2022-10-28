@@ -95,7 +95,11 @@ export class BankModule {
   }
 
   public getBalance(address: string): ParsedCoin[] {
-    return (this.chain.store.getIn(['bank', 'balances', address], []) as Coin[]).map(ParsedCoin.fromCoin);
+    return (this.getBalances()[address] ?? []).map(ParsedCoin.fromCoin);
+  }
+  
+  public getBalances(): Record<string, Coin[]> {
+    return (this.chain.store.getIn(['bank', 'balances'], {}) as any);
   }
 
   public async handleMsg(
