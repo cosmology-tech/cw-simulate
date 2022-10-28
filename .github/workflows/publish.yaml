@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Bump version
+      - name: Update version
         run: |
           YARN_VERSION_GIT_TAG='' yarn version --patch
           NEW_VERSION=${{ github.event.release.tag_name }}
@@ -43,11 +43,7 @@ jobs:
 
       - name: Install dependencies
         run: yarn install
-        env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: yarn build && yarn publish
-        name: Build and publish
-        env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish
+        run: yarn build && yarn publish
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
