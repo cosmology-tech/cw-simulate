@@ -141,7 +141,10 @@ export class WasmModule {
     instantiateMsg: any
   ): Promise<any> {
     // TODO: add funds logic
-
+    this.chain.store = this.chain.store.setIn(
+        ['bank', 'balances', sender],
+        funds
+    );
     const contractAddressHash = WasmModule.buildContractAddress(
       codeId,
       this.lastInstanceId + 1

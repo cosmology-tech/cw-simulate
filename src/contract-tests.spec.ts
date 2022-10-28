@@ -112,7 +112,10 @@ describe('CWSimulate Contract Tests', function () {
 
     let info = {
       sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-      funds: [],
+      funds: [{
+        denom: 'uluna',
+        amount: '1000000000',
+      }],
     };
 
     let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));

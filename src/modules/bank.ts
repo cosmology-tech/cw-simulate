@@ -12,7 +12,7 @@ export class BankModule {
   public static STORE_KEY: Uint8Array = toAscii('bank');
 
   constructor(public chain: CWSimulateApp) {
-    this.chain.store.set('bank', {balances: {}});
+    this.chain.store.set('bank', {'balances': {}});
   }
 
   public send(sender: string, recipient: string, amount: Coin[]) {
@@ -27,7 +27,8 @@ export class BankModule {
             denom: coin.denom,
             amount: (parseInt(hasCoin.amount) - parseInt(coin.amount)).toString(),
           }
-          delete senderBalance[senderBalance.indexOf(hasCoin)];
+          const deleteIndex = senderBalance.findIndex((c: Coin) => c.denom === coin.denom);
+          delete senderBalance[deleteIndex];
           senderBalance.push(newCoin);
           this.setBalance(sender, senderBalance);
         } else {
@@ -36,7 +37,7 @@ export class BankModule {
       } else {
         throw new Error(`Sender ${sender} does not have ${coin.denom} coin`);
       }
-    })
+    });
 
     // Add amount to recipient
     const recipientBalance = this.getBalance(recipient);
@@ -47,12 +48,36 @@ export class BankModule {
           denom: coin.denom,
           amount: (parseInt(hasCoin.amount) + parseInt(coin.amount)).toString(),
         }
-        delete recipientBalance[recipientBalance.indexOf(hasCoin)];
+        const deleteIndex = recipientBalance.findIndex((c: Coin) => c.denom === coin.denom);
+        delete recipientBalance[deleteIndex];
         recipientBalance.push(newCoin);
         this.setBalance(recipient, recipientBalance);
       } else {
         recipientBalance.push(coin);
         this.setBalance(recipient, recipientBalance);
+      }
+    });
+  }
+
+  public burn(from_address: string, amount: Coin[]) {
+    let balance = this.getBalance(from_address);
+    amount.forEach((coin: Coin) => {
+      const hasCoin = balance.find((c: Coin) => c.denom === coin.denom);
+      if (hasCoin) {
+        if (parseInt(hasCoin.amount) >= parseInt(coin.amount)) {
+          const newCoin = {
+            denom: coin.denom,
+            amount: (parseInt(hasCoin.amount) - parseInt(coin.amount)).toString(),
+          }
+          const deleteIndex = balance.findIndex((c: Coin) => c.denom === coin.denom);
+          delete balance[deleteIndex];
+          balance.push(newCoin);
+          this.setBalance(from_address, balance);
+        } else {
+          throw new Error(`Sender ${from_address} does not have enough balance`);
+        }
+      } else {
+        throw new Error(`Sender ${from_address} does not have ${coin.denom} coin`);
       }
     });
   }
@@ -65,7 +90,7 @@ export class BankModule {
   }
 
   public getBalance(address: string): Coin[] {
-    return this.chain.store.getIn(['bank', 'balances', address], 0) as Coin[];
+    return this.chain.store.getIn(['bank', 'balances', address], []) as Coin[];
   }
 
   public async handleMsg(
