@@ -27,15 +27,12 @@ jobs:
             export NEW_VERSION=${{ github.event.inputs.version }}
           fi
 
+          git config --global user.email "bot@terran.one"
+          git config --global user.name "Github Bot"
+
           yarn version --new-version $NEW_VERSION
-
-      - name: Pull Remote Changes
-        run: git pull --autostash
-
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        name: Commit & Push
-        with:
-          commit_message: Updated version to $NEW_VERSION
+          git pull --autostash
+          git push
 
       - uses: actions/setup-node@v3
         name: Set up node
