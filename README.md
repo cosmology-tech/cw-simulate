@@ -28,12 +28,13 @@ $ yarn add @terran-one/cw-simulate
 
 ## Usage
 
-1. Create a `CWSimulateApp` object - this is a simulation environment describing a single chains.
+1. Create a `CWSimulateApp` object - this is a simulation environment describing a single chain.
 2. As needed, per chain:
-   - Upload the WASM bytecode using `App.wasm.create()`. This will register a new `codeId` to reference the uploaded contract code.
-   - Create a new contract instance using `App.wasm.instantiateContract()` and passing in the `codeId` generated in the previous step.
+   - Upload the WASM bytecode using `App.wasm.create`. This will register a new `codeId` to reference the uploaded contract code.
+   - Create a new contract instance using `App.wasm.instantiateContract`, passing in the `codeId` generated in the previous step.
    - From the response, retrieve the `contractAddress` to refer to the contract instance.
   - You can now run `execute` and `query` messages against the instance, and they should work as expected.
+
 ### Example
 
 The following example creates a chain, instantiates a contract on it, and performs an `execute` and `query`.
