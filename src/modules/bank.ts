@@ -32,6 +32,7 @@ export class BankModule {
           senderBalance.push(newCoin);
           this.setBalance(sender, senderBalance);
         } else {
+          // rollback
           throw new Error(`Sender ${sender} does not have enough balance`);
         }
       } else {

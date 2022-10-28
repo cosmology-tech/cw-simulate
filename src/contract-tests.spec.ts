@@ -39,13 +39,13 @@ interface ThrowCommand {
 }
 
 type Command =
-  | MsgCommand
-  | BankMsgCommand
-  | SubCommand
-  | EvCommand
-  | AttrCommand
-  | DataCommand
-  | ThrowCommand;
+    | MsgCommand
+    | BankMsgCommand
+    | SubCommand
+    | EvCommand
+    | AttrCommand
+    | DataCommand
+    | ThrowCommand;
 
 function run(program: Command[]) {
   return {
@@ -93,7 +93,7 @@ function data(v: number[]): DataCommand {
 
 function push(data: string) {
   return {
-    push: { data },
+    push: {data},
   };
 }
 
@@ -103,170 +103,160 @@ function err(msg: string): ThrowCommand {
   };
 }
 
+const coins = [{
+  denom: 'uluna',
+  amount: '1000000000',
+}];
+let info = {
+  sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
+  funds: coins,
+};
+
+let app: CWSimulateApp;
 describe('CWSimulate Contract Tests', function () {
-  it('send_coins_works', async () => {
-    let app = new CWSimulateApp({
+  beforeEach(function () {
+    app = new CWSimulateApp({
       chainId: 'phoenix-1',
       bech32Prefix: 'terra',
     });
+  });
 
-    let info = {
-      sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-      funds: [{
-        denom: 'uluna',
-        amount: '1000000000',
-      }],
-    };
-
+  it('send_coins_works', async () => {
     let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
     let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
-    let { contractAddress } = res;
+    let {contractAddress} = res;
     console.log(res);
-
-    // let executeMsg = run([
-    //   sub(1, run([msg(push('S1'))]), ReplyOn.SUCCESS),
-    //   sub(2, run([err('s2')]), ReplyOn.ERROR),
-    //   msg(push('M1')),
-    //   msg(run([err('fail at end')])),
-    // ]);
+    app.store = app.store.setIn(['bank', 'balances', contractAddress], coins);
 
     let executeMsg = run([
       bank({
         send: {
           to_address: 'recipient_address',
-          amount: [{ denom: 'uluna', amount: '1000' }],
+          amount: [{denom: 'uluna', amount: '1000'}],
         },
       }),
     ]);
 
     res = await app.wasm.execute(
-      info.sender,
-      info.funds,
-      contractAddress,
-      executeMsg
+        info.sender,
+        info.funds,
+        contractAddress,
+        executeMsg
     );
     console.log(res);
 
-    res = await app.wasm.query(contractAddress, { get_buffer: {} });
+    res = await app.wasm.query(contractAddress, {get_buffer: {}});
     console.log(res);
+    expect(res.ok).toEqual(true);
   });
 
   it('send_nonexistent_coins_fails', async () => {
-    let app = new CWSimulateApp({
-      chainId: 'phoenix-1',
-      bech32Prefix: 'terra',
-    });
-
-    let info = {
-      sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-      funds: [{
-        denom: 'uluna',
-        amount: '1000000000',
-      }],
-    };
-
     let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
     let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
-    let { contractAddress } = res;
+    let {contractAddress} = res;
     console.log(res);
+    app.store = app.store.setIn(['bank', 'balances', contractAddress], coins);
 
     let executeMsg = run([
       bank({
         send: {
           to_address: 'recipient_address',
-          amount: [{ denom: 'ufoo', amount: '1000' }],
+          amount: [{denom: 'ufoo', amount: '1000'}],
         },
       }),
     ]);
 
     res = await app.wasm.execute(
-      info.sender,
-      info.funds,
-      contractAddress,
-      executeMsg
+        info.sender,
+        info.funds,
+        contractAddress,
+        executeMsg
     );
     console.log(res);
 
-    res = await app.wasm.query(contractAddress, { get_buffer: {} });
+    res = await app.wasm.query(contractAddress, {get_buffer: {}});
     console.log(res);
   });
 
   it('send_with_insufficient_funds_fails', async () => {
-    let app = new CWSimulateApp({
-      chainId: 'phoenix-1',
-      bech32Prefix: 'terra',
-    });
-
-    let info = {
-      sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-      funds: [{
-        denom: 'uluna',
-        amount: '1000000000',
-      }],
-    };
-
     let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
     let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
-    let { contractAddress } = res;
+    let {contractAddress} = res;
     console.log(res);
+    app.store = app.store.setIn(['bank', 'balances', contractAddress], coins);
 
     let executeMsg = run([
       bank({
         send: {
           to_address: 'recipient_address',
-          amount: [{ denom: 'uluna', amount: '1000000001' }],
+          amount: [{denom: 'uluna', amount: '1000000001'}],
         },
       }),
     ]);
 
     res = await app.wasm.execute(
-      info.sender,
-      info.funds,
-      contractAddress,
-      executeMsg
+        info.sender,
+        info.funds,
+        contractAddress,
+        executeMsg
     );
     console.log(res);
 
-    res = await app.wasm.query(contractAddress, { get_buffer: {} });
+    res = await app.wasm.query(contractAddress, {get_buffer: {}});
     console.log(res);
   });
 
   it('burn_coins_works', async () => {
-    let app = new CWSimulateApp({
-      chainId: 'phoenix-1',
-      bech32Prefix: 'terra',
-    });
-
-    let info = {
-      sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-      funds: [{
-        denom: 'uluna',
-        amount: '1000000000',
-      }],
-    };
-
     let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
     let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
-    let { contractAddress } = res;
+    let {contractAddress} = res;
     console.log(res);
+    app.store = app.store.setIn(['bank', 'balances', contractAddress], coins);
 
     let executeMsg = run([
       bank({
         burn: {
-          amount: [{ denom: 'uluna', amount: '1000' }],
+          amount: [{denom: 'uluna', amount: '1000'}],
         },
       }),
     ]);
 
     res = await app.wasm.execute(
-      info.sender,
-      info.funds,
-      contractAddress,
-      executeMsg
+        info.sender,
+        info.funds,
+        contractAddress,
+        executeMsg
     );
     console.log(res);
 
-    res = await app.wasm.query(contractAddress, { get_buffer: {} });
+    res = await app.wasm.query(contractAddress, {get_buffer: {}});
+    console.log(res);
+  });
+
+  it('burn_nonexistent_coins_fails', async () => {
+    let code = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
+    let res = await app.wasm.instantiate(info.sender, info.funds, code, {});
+    let {contractAddress} = res;
+    console.log(res);
+    app.store = app.store.setIn(['bank', 'balances', contractAddress], coins);
+
+    let executeMsg = run([
+      bank({
+        burn: {
+          amount: [{denom: 'ufoo', amount: '1000'}],
+        },
+      }),
+    ]);
+
+    res = await app.wasm.execute(
+        info.sender,
+        info.funds,
+        contractAddress,
+        executeMsg
+    );
+    console.log(res);
+
+    res = await app.wasm.query(contractAddress, {get_buffer: {}});
     console.log(res);
   });
 });
