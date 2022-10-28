@@ -1,7 +1,8 @@
-import { toAscii } from '@cosmjs/encoding';
-import { CWSimulateApp } from 'CWSimulateApp';
-import { Err, Ok, Result } from 'ts-results';
 import { Coin } from '@cosmjs/amino';
+import { toAscii } from '@cosmjs/encoding';
+import { Map } from 'immutable';
+import { Err, Ok, Result } from 'ts-results';
+import { CWSimulateApp } from '../CWSimulateApp';
 
 export interface AppResponse {
   events: any[];
@@ -45,7 +46,7 @@ export class BankModule {
         return Err(`Sender ${sender} has ${hasCoin?.amount ?? BigInt(0)} ${coin.denom}, needs ${coin.amount}`);
       }
     }
-    senderBalance = senderBalance.filter(c => c.amount === BigInt(0));
+    senderBalance = senderBalance.filter(c => c.amount > BigInt(0));
 
     // Add amount to recipient
     const recipientBalance = this.getBalance(recipient);
@@ -95,11 +96,11 @@ export class BankModule {
   }
 
   public getBalance(address: string): ParsedCoin[] {
-    return (this.getBalances()[address] ?? []).map(ParsedCoin.fromCoin);
+    return (this.getBalances().get(address) ?? []).map(ParsedCoin.fromCoin);
   }
   
-  public getBalances(): Record<string, Coin[]> {
-    return (this.chain.store.getIn(['bank', 'balances'], {}) as any);
+  public getBalances() {
+    return (this.chain.store.getIn(['bank', 'balances'], Map([])) as Map<string, Coin[]>);
   }
 
   public async handleMsg(
@@ -163,7 +164,7 @@ export class BankModule {
 }
 
 /** Essentially a `Coin`, but the `amount` is a `bigint` for more convenient use. */
-class ParsedCoin {
+export class ParsedCoin {
   constructor(public readonly denom: string, public amount: bigint) {}
   
   toCoin(): Coin {
