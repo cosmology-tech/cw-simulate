@@ -3,7 +3,6 @@ on: [push]
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
-    if: "!contains(github.event.head_commit.message, 'ci-skip')"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -19,16 +18,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Install deps and build
+      - name: Install dependencies
         run: yarn install
-        env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Test
         run: yarn test --ci --coverage --maxWorkers=2
-        env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: yarn build
-        env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
