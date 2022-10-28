@@ -7,6 +7,10 @@ interface MsgCommand {
   msg: any;
 }
 
+interface BankMsgCommand {
+  bank_msg: any;
+}
+
 enum ReplyOn {
   SUCCESS = 'success',
   AlWAYS = 'always',
@@ -36,6 +40,7 @@ interface ThrowCommand {
 
 type Command =
   | MsgCommand
+  | BankMsgCommand
   | SubCommand
   | EvCommand
   | AttrCommand
@@ -53,6 +58,12 @@ function run(program: Command[]) {
 function msg(payload: any): MsgCommand {
   return {
     msg: payload,
+  };
+}
+
+function bank(payload: any): BankMsgCommand {
+  return {
+    bank_msg: payload,
   };
 }
 
@@ -109,11 +120,20 @@ describe('CWSimulate Contract Tests', function () {
     let { contractAddress } = res;
     console.log(res);
 
+    // let executeMsg = run([
+    //   sub(1, run([msg(push('S1'))]), ReplyOn.SUCCESS),
+    //   sub(2, run([err('s2')]), ReplyOn.ERROR),
+    //   msg(push('M1')),
+    //   msg(run([err('fail at end')])),
+    // ]);
+
     let executeMsg = run([
-      sub(1, run([msg(push('S1'))]), ReplyOn.SUCCESS),
-      sub(2, run([err('s2')]), ReplyOn.ERROR),
-      msg(push('M1')),
-      msg(run([err('fail at end')])),
+      bank({
+        send: {
+          to_address: 'recipient_address',
+          amount: [{ denom: 'uluna', amount: '1000' }],
+        },
+      }),
     ]);
 
     res = await app.wasm.execute(
