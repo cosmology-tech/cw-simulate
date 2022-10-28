@@ -270,6 +270,13 @@ export class WasmModule {
     );
     if ('error' in response) {
       this.chain.store = snapshot; // revert
+      trace.push({
+        execute: {
+          contractAddress,
+          executeMsg,
+          error: response.error,
+        },
+      });
       return Err(response.error);
     } else {
       let customEvent = {
@@ -293,7 +300,14 @@ export class WasmModule {
         res,
         subtrace
       );
-      trace.push(['execute_contract', subtrace]);
+      trace.push({
+        execute: {
+          contractAddress,
+          executeMsg,
+          response: response.ok,
+          subcalls: subtrace,
+        },
+      });
       return result;
     }
   }
@@ -405,9 +419,15 @@ export class WasmModule {
     replyMsg: any,
     trace: any = []
   ): Promise<Result<AppResponse, string>> {
-    trace.push('reply');
     let response = await this.callReply(contractAddress, replyMsg);
     if ('error' in response) {
+      trace.push({
+        reply: {
+          contractAddress,
+          replyMsg,
+          error: response.error,
+        },
+      });
       return Err(response.error);
     } else {
       let customEvent = {
@@ -428,11 +448,22 @@ export class WasmModule {
         customEvent,
         response.ok
       );
-      return await this.handleContractResponse(
+      let subtrace: any = [];
+      let result = await this.handleContractResponse(
         contractAddress,
         response.ok.messages,
-        res
+        res,
+        subtrace
       );
+      trace.push({
+        reply: {
+          contractAddress,
+          replyMsg,
+          response: response.ok,
+          subcalls: subtrace,
+        },
+      });
+      return result;
     }
   }
 

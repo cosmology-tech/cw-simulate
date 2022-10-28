@@ -379,8 +379,6 @@ describe('Rollback', function () {
       trace
     );
 
-    console.log(JSON.stringify(trace, null, 2));
-
     let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
     expect(queryRes.val).toEqual({
       buffer: ['A', 'B', 'E', 'F'],
