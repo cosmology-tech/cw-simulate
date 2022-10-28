@@ -100,13 +100,7 @@ export class BankModule {
   ): Promise<Result<AppResponse, string>> {
     let bankMsg = msg.bank;
     if (bankMsg.send) {
-      console.log(bankMsg.send);
       this.send(sender, bankMsg.send.to_address, bankMsg.send.amount);
-      console.log({
-        sender: this.getBalance(sender),
-        recipient: this.getBalance(bankMsg.send.to_address),
-      });
-
       return Ok({
         events: [
           {
