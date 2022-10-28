@@ -30,10 +30,11 @@ export class CWSimulateApp {
 
   public async handleMsg(
     sender: string,
-    msg: any
+    msg: any,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
     if ('wasm' in msg) {
-      return await this.wasm.handleMsg(sender, msg);
+      return await this.wasm.handleMsg(sender, msg, trace);
     }
 
     return Err(`unknown message: ${JSON.stringify(msg)}`);

@@ -258,7 +258,8 @@ export class WasmModule {
     sender: string,
     funds: Coin[],
     contractAddress: string,
-    executeMsg: any
+    executeMsg: any,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
     let snapshot = this.chain.store;
     let response = await this.callExecute(
@@ -285,22 +286,27 @@ export class WasmModule {
         customEvent,
         response.ok
       );
-      return await this.handleContractResponse(
+      let subtrace: any = [];
+      let result = await this.handleContractResponse(
         contractAddress,
         response.ok.messages,
-        res
+        res,
+        subtrace
       );
+      trace.push(['execute_contract', subtrace]);
+      return result;
     }
   }
 
   async handleContractResponse(
     contractAddress: string,
     messages: ContractResponse.Data['messages'],
-    res: AppResponse
+    res: AppResponse,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
     let snapshot = this.chain.store;
     for (const message of messages) {
-      let subres = await this.executeSubmsg(contractAddress, message);
+      let subres = await this.executeSubmsg(contractAddress, message, trace);
       if (subres.err) {
         this.chain.store = snapshot; // revert
         return subres;
@@ -317,10 +323,11 @@ export class WasmModule {
 
   async executeSubmsg(
     contractAddress: string,
-    message: SubMsg.Data
+    message: SubMsg.Data,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
     let { id, msg, gas_limit, reply_on } = message;
-    let r = await this.chain.handleMsg(contractAddress, msg);
+    let r = await this.chain.handleMsg(contractAddress, msg, trace);
     if (r.ok) {
       // submessage success
       let { events, data } = r.val;
@@ -335,7 +342,7 @@ export class WasmModule {
             },
           },
         };
-        let replyRes = await this.reply(contractAddress, replyMsg);
+        let replyRes = await this.reply(contractAddress, replyMsg, trace);
         if (replyRes.err) {
           // submessage success, call reply, reply failed
           return replyRes;
@@ -361,7 +368,7 @@ export class WasmModule {
             error: r.val,
           },
         };
-        let replyRes = await this.reply(contractAddress, replyMsg);
+        let replyRes = await this.reply(contractAddress, replyMsg, trace);
         if (replyRes.err) {
           // submessage failed, call reply, reply failed
           return replyRes;
@@ -395,8 +402,10 @@ export class WasmModule {
 
   async reply(
     contractAddress: string,
-    replyMsg: any
+    replyMsg: any,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
+    trace.push('reply');
     let response = await this.callReply(contractAddress, replyMsg);
     if ('error' in response) {
       return Err(response.error);
@@ -484,7 +493,8 @@ export class WasmModule {
 
   async handleMsg(
     sender: string,
-    msg: any
+    msg: any,
+    trace: any = []
   ): Promise<Result<AppResponse, string>> {
     let { wasm } = msg;
     if ('execute' in wasm) {
@@ -494,7 +504,8 @@ export class WasmModule {
         sender,
         funds,
         contract_addr,
-        JSON.parse(msgJSON)
+        JSON.parse(msgJSON),
+        trace
       );
     } else if ('instantiate' in wasm) {
       throw new Error('unimplemented');

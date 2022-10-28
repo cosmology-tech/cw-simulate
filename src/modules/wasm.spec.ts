@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { AppResponse, Event } from '../cw-interface';
-import { Result } from 'ts-results';
 import { toBase64 } from '@cosmjs/encoding';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
@@ -371,12 +370,16 @@ describe('Rollback', function () {
       msg(push('F'))
     );
 
+    let trace: any = [];
     let res = await app.wasm.executeContract(
       info.sender,
       info.funds,
       contractAddress,
-      executeMsg
+      executeMsg,
+      trace
     );
+
+    console.log(JSON.stringify(trace, null, 2));
 
     let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
     expect(queryRes.val).toEqual({
