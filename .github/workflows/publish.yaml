@@ -42,7 +42,11 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Build and publish
-        run: yarn build && yarn publish
+      - name: Build
+        run: yarn build
+
+      - name: Publish
+        run: |
+          yarn publish --new-version $NEW_VERSION
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
