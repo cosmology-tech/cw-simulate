@@ -24,7 +24,7 @@ jobs:
         run: |
           export NEW_VERSION=${{ github.event.release.tag_name }}
           if [ -z $NEW_VERSION ]; then
-            export NEW_VERSIONNEW_VERSION=${{ github.event.inputs.version }}
+            export NEW_VERSION=${{ github.event.inputs.version }}
           fi
 
           yarn version --new-version $NEW_VERSION
