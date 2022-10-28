@@ -8,7 +8,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=14"
+    "node": ">=18"
   },
   "repository": "https://github.com/terran-one/cw-simulate",
   "author": "Terran One LLC",

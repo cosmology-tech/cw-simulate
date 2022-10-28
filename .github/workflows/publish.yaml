@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-node@v3
         name: Set up node
         with:
-          node-version: '16.x'
+          node-version: '18.x'
 
       - name: Install dependencies
         run: yarn install
@@ -47,6 +47,5 @@ jobs:
 
       - name: Publish
         run: |
-          yarn publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+          echo "${{ secrets.YARNRC_YML }}" >> .yarnrc.yml
+          yarn publish --non-interactive --use-yarnrc .yarnrc.yml
