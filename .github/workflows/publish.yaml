@@ -47,6 +47,6 @@ jobs:
 
       - name: Publish
         run: |
-          yarn publish --new-version $NEW_VERSION
+          yarn publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
