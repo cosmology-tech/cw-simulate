@@ -1,4 +1,5 @@
 import { WasmModule } from './modules/wasm';
+import { BankModule } from './modules/bank';
 import { AppResponse } from './cw-interface';
 import { Map } from 'immutable';
 import { Result, Ok, Err } from 'ts-results';
@@ -17,6 +18,7 @@ export class CWSimulateApp {
   public time: number;
 
   public wasm: WasmModule;
+  public bank: BankModule;
 
   constructor(options: CWSimulateAppOptions) {
     this.chainId = options.chainId;
@@ -26,6 +28,7 @@ export class CWSimulateApp {
     this.time = 0;
 
     this.wasm = new WasmModule(this);
+    this.bank = new BankModule(this);
   }
 
   public async handleMsg(
@@ -35,8 +38,10 @@ export class CWSimulateApp {
   ): Promise<Result<AppResponse, string>> {
     if ('wasm' in msg) {
       return await this.wasm.handleMsg(sender, msg, trace);
+    } else if ('bank' in msg) {
+      return await this.bank.handleMsg(sender, msg.bank);
+    } else {
+      return Err(`unknown message: ${JSON.stringify(msg)}`);
     }
-
-    return Err(`unknown message: ${JSON.stringify(msg)}`);
   }
 }
