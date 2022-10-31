@@ -44,14 +44,3 @@ jobs:
             {
               "text": ":ship: A new version of <https://www.npmjs.com/package/@terran-one/cw-simulate|cw-simulate> has been published."
             }
-      - name: Notify on failure
-        if: ${{ steps.publish.outputs.success == 'false' }}
-        uses: slackapi/slack-github-action@v1.22.0
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-        with:
-          payload: |
-            {
-              "text": ":boom: Failed to publish <https://github.com/Terran-One/cw-simulate/actions/workflows/publish.yaml|cw-simulate>."
-            }
