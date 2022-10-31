@@ -14,21 +14,6 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.release.tag_name }}
-
-      - name: Update version
-        run: |
-          export NEW_VERSION=${{ github.event.release.tag_name }}
-
-          git config --global user.email "bot@terran.one"
-          git config --global user.name "Github Bot"
-          git checkout main
-
-          yarn version --new-version $NEW_VERSION
-
-          git pull --autostash
-          git push
 
       - uses: actions/setup-node@v3
         name: Set up node
