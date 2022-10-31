@@ -46,6 +46,6 @@ jobs:
         run: yarn build
 
       - name: Publish
-        run: |
-          echo "${{ secrets.YARNRC_YML }}" >> .yarnrc.yml
-          yarn publish --non-interactive --use-yarnrc .yarnrc.yml
+        run: yarn publish --non-interactive
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
