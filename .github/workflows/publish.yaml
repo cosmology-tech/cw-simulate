@@ -1,11 +1,6 @@
 name: Publish package to npm
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version'
-        required: true
   release:
     types: [created]
 
@@ -19,18 +14,19 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Update version
         run: |
           export NEW_VERSION=${{ github.event.release.tag_name }}
-          if [ -z $NEW_VERSION ]; then
-            export NEW_VERSION=${{ github.event.inputs.version }}
-          fi
 
           git config --global user.email "bot@terran.one"
           git config --global user.name "Github Bot"
+          git checkout main
 
           yarn version --new-version $NEW_VERSION
+
           git pull --autostash
           git push
 
@@ -47,6 +43,30 @@ jobs:
         run: yarn build
 
       - name: Publish
+        id: publish
         run: yarn publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Notify on success
+        if: ${{ steps.publish.outputs.success == 'true' }}
+        uses: slackapi/slack-github-action@v1.22.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": ":ship: A new version of <https://www.npmjs.com/package/@terran-one/cw-simulate|cw-simulate> has been published."
+            }
+      - name: Notify on failure
+        if: ${{ steps.publish.outputs.success == 'false' }}
+        uses: slackapi/slack-github-action@v1.22.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": ":boom: Failed to publish <https://github.com/Terran-One/cw-simulate/actions/workflows/publish.yaml|cw-simulate>."
+            }
