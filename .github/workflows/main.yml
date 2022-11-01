@@ -1,13 +1,9 @@
 name: CI
-
-on:
-  push:
-    branches:
-      - main
-
+on: [push]
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
+
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -23,11 +19,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Install dependencies
-        run: yarn install
-
-      - name: Build
-        run: yarn build
+      - name: Install deps and build (with cache)
+        uses: bahmutov/npm-install@v1
 
       - name: Test
-        run: yarn test --ci --coverage --maxWorkers=2
+        run: npm test --ci --coverage --maxWorkers=2
+
+      - name: Build
+        run: npm run build
