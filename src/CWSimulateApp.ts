@@ -1,4 +1,4 @@
-import { IQuerier, QuerierBase } from '@terran-one/cosmwasm-vm-js';
+import { QuerierBase } from '@terran-one/cosmwasm-vm-js';
 import { Map } from 'immutable';
 import { Result, Err } from 'ts-results';
 import { WasmModule } from './modules/wasm';
@@ -20,7 +20,7 @@ export class CWSimulateApp {
 
   public wasm: WasmModule;
   public bank: BankModule;
-  public querier: IQuerier;
+  public querier: Querier;
 
   constructor(options: CWSimulateAppOptions) {
     this.chainId = options.chainId;
