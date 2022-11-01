@@ -22,6 +22,22 @@ export type BankMessage =
       }
     }
 
+export type BankQuery =
+  | {
+      balance: {
+        address: string;
+        denom: string;
+      };
+    }
+  | {
+      all_balances: {
+        address: string;
+      };
+    }
+
+export type BalanceResponse = { amount: Coin };
+export type AllBalancesResponse = { amount: Coin[] };
+
 export class BankModule {
   public static STORE_KEY: Uint8Array = toAscii('bank');
 
@@ -143,23 +159,24 @@ export class BankModule {
     }
   }
 
-  public handleQuery(query: any) {
-    let bankQuery = query.bank;
-    if (bankQuery.balance) {
-      let {address, denom} = bankQuery.balance;
-      return {
-        amount: this.getBalance(address),
-      };
+  public handleQuery(query: BankQuery) {
+    let bankQuery = query;
+    if ('balance' in bankQuery) {
+      let { address, denom } = bankQuery.balance;
+      const hasCoin = this
+        .getBalance(address)
+        .find(c => c.denom === denom);
+      return Ok<BalanceResponse>({
+        amount: hasCoin?.toCoin() ?? { denom, amount: '0' },
+      });
     }
-
-    if (bankQuery.all_balances) {
-      let {address} = bankQuery.all_balances;
-      return {
-        amount: this.getBalance(address),
-      };
+    else if ('all_balances' in bankQuery) {
+      let { address } = bankQuery.all_balances;
+      return Ok<AllBalancesResponse>({
+        amount: this.getBalance(address).map(c => c.toCoin()),
+      });
     }
-
-    throw new Error('Unknown bank query');
+    return Err('Unknown bank query');
   }
 }
 
