@@ -41,7 +41,12 @@ jobs:
         with:
           payload: |
             {
-              "text": ":ship: A new version of <https://www.npmjs.com/package/@terran-one/cw-simulate|cw-simulate> has been published."
+              "attachments": [
+                {
+                  "text": ":shipit: A new version of <https://www.npmjs.com/package/@terran-one/cw-simulate|cw-simulate> has been published",
+                  "color": "good"
+                }
+              ]
             }
 
       - name: Notify on failure
@@ -53,5 +58,10 @@ jobs:
         with:
           payload: |
             {
-              "text": ":boom: Failed to publish <https://github.com/Terran-One/cw-simulate/actions/workflows/publish.yaml|cw-simulate>."
+              "attachments": [
+                {
+                  "text": ":boom: Failed to publish <https://github.com/Terran-One/cw-simulate/actions/workflows/publish.yaml|cw-simulate>",
+                  "color": "danger"
+                }
+              ]
             }
