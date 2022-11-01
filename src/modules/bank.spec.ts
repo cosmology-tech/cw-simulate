@@ -1,7 +1,7 @@
 import { Map } from 'immutable';
 import { cmd, run, TestContract } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
-import { BankMessage, ParsedCoin } from './bank';
+import { BankMessage, BankQuery, ParsedCoin } from './bank';
 
 type WrappedBankMessage = {
   bank: BankMessage;
@@ -139,5 +139,42 @@ describe('BankModule', () => {
       ['alice', [{denom: 'foo', amount: '100'}]],
       ['bob',   [{denom: 'foo', amount: '100'}]],
     ]));
+  });
+  
+  it('querier integration', () => {
+    const bank = chain.bank;
+    
+    const queryBalance: BankQuery = {
+      balance: {
+        address: 'alice',
+        denom: 'foo',
+      },
+    };
+    
+    const queryAllBalances: BankQuery = {
+      all_balances: {
+        address: 'bob',
+      },
+    };
+    
+    bank.setBalance('alice', [
+      { denom: 'foo', amount: '100' },
+      { denom: 'bar', amount: '200' },
+    ]);
+    bank.setBalance('bob', [
+      { denom: 'foo', amount: '200' },
+      { denom: 'bar', amount: '200' },
+    ]);
+    
+    let response = chain.querier.handleQuery({ bank: queryBalance });
+    expect(response.ok).toBeTruthy();
+    expect(response.unwrap().amount).toEqual({ denom: 'foo', amount: '100' });
+    
+    response = chain.querier.handleQuery({ bank: queryAllBalances });
+    expect(response.ok).toBeTruthy();
+    expect(response.unwrap().amount).toEqual([
+      { denom: 'foo', amount: '200' },
+      { denom: 'bar', amount: '200' },
+    ]);
   });
 });
