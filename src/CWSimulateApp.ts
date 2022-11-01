@@ -1,8 +1,9 @@
-import { WasmModule } from './modules/wasm';
-import { BankModule } from './modules/bank';
-import { AppResponse } from './cw-interface';
+import { IQuerier, QuerierBase } from '@terran-one/cosmwasm-vm-js';
 import { Map } from 'immutable';
-import { Result, Ok, Err } from 'ts-results';
+import { Result, Err } from 'ts-results';
+import { WasmModule } from './modules/wasm';
+import { BankModule, BankQuery } from './modules/bank';
+import { AppResponse } from './cw-interface';
 
 export interface CWSimulateAppOptions {
   chainId: string;
@@ -19,6 +20,7 @@ export class CWSimulateApp {
 
   public wasm: WasmModule;
   public bank: BankModule;
+  public querier: IQuerier;
 
   constructor(options: CWSimulateAppOptions) {
     this.chainId = options.chainId;
@@ -29,6 +31,7 @@ export class CWSimulateApp {
 
     this.wasm = new WasmModule(this);
     this.bank = new BankModule(this);
+    this.querier = new Querier(this);
   }
 
   public async handleMsg(
@@ -42,6 +45,26 @@ export class CWSimulateApp {
       return await this.bank.handleMsg(sender, msg.bank);
     } else {
       return Err(`unknown message: ${JSON.stringify(msg)}`);
+    }
+  }
+}
+
+type QueryMessage =
+  | {
+      bank: BankQuery;
+    }
+
+export class Querier extends QuerierBase {
+  constructor(public readonly app: CWSimulateApp) {
+    super();
+  }
+  
+  handleQuery(query: QueryMessage) {
+    if ('bank' in query) {
+      return this.app.bank.handleQuery(query.bank);
+    }
+    else {
+      return Err('Unknown query message');
     }
   }
 }
