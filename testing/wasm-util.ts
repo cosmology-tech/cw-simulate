@@ -1,6 +1,6 @@
 import { Coin } from '@cosmjs/amino';
 import { readFileSync } from 'fs';
-import { Event, ReplyOn } from '../src/cw-interface';
+import { Event, ReplyOn } from '../src/types';
 import { CWSimulateApp } from '../src/CWSimulateApp';
 import { BankMessage } from '../src/modules/bank';
 
@@ -58,7 +58,7 @@ export const cmd = {
       msg: payload,
     };
   },
-  
+
   bank(msg: BankMessage): BankCommand {
     return {
       bank_msg: msg,
@@ -102,7 +102,7 @@ export const cmd = {
   },
 };
 
-export function event(ty: string, attrs: [string, string][]): Event.Data {
+export function event(ty: string, attrs: [string, string][]): Event {
   return {
     type: ty,
     attributes: attrs.map(([k, v]) => ({ key: k, value: v })),
@@ -113,18 +113,21 @@ type InstantiateOptions = {
   sender?: string;
   codeId?: number;
   funds?: Coin[];
-}
+};
 
 /** Utility methods for registration, instantiation, and interaction
  * with our test contract. */
 export class TestContract {
-  constructor(public readonly app: CWSimulateApp, public readonly creator = DEFAULT_CREATOR) {}
-  
+  constructor(
+    public readonly app: CWSimulateApp,
+    public readonly creator = DEFAULT_CREATOR
+  ) {}
+
   /** Register the test contract wasm code w/ the app */
   register(creator?: string): number {
     return this.app.wasm.create(creator ?? this.creator, BYTECODE);
   }
-  
+
   /** Instantiate test contract. */
   async instantiate(opts: InstantiateOptions = {}) {
     const codeId = opts.codeId ?? this.register(opts.sender);
@@ -132,20 +135,36 @@ export class TestContract {
       opts.sender ?? this.creator,
       opts.funds ?? [],
       codeId,
-      {},
+      {}
     );
-    
+
     const addr = res.unwrap().events[0].attributes[0].value;
     return new TestContractInstance(this, addr);
   }
 }
 
 export class TestContractInstance {
-  constructor(public readonly contract: TestContract, public readonly address: string) {}
-  
-  async execute(sender: string, msg: any, funds: Coin[] = [], trace: any[] = []) {
-    return await this.app.wasm.executeContract(sender, funds, this.address, msg, trace);
+  constructor(
+    public readonly contract: TestContract,
+    public readonly address: string
+  ) {}
+
+  async execute(
+    sender: string,
+    msg: any,
+    funds: Coin[] = [],
+    trace: any[] = []
+  ) {
+    return await this.app.wasm.executeContract(
+      sender,
+      funds,
+      this.address,
+      msg,
+      trace
+    );
   }
-  
-  get app() { return this.contract.app }
+
+  get app() {
+    return this.contract.app;
+  }
 }
