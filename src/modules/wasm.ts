@@ -70,7 +70,7 @@ export interface ContractInfo {
 }
 
 export interface ExecuteTraceLog {
-  type: 'execute';
+  type: 'execute' | 'instantiate';
   contractAddress: string;
   info: {
     sender: string;
@@ -165,6 +165,14 @@ export class WasmModule {
       'contracts',
       contractAddress,
     ]) as ContractInfo;
+  }
+
+  deleteContractInfo(contractAddress: string) {
+    this.chain.store = this.chain.store.deleteIn([
+      'wasm',
+      'contracts',
+      contractAddress,
+    ]);
   }
 
   create(creator: string, wasmCode: Uint8Array): number {
@@ -275,20 +283,39 @@ export class WasmModule {
     sender: string,
     funds: Coin[],
     codeId: number,
-    instantiateMsg: any
+    instantiateMsg: any,
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     // first register the contract instance
+    let snapshot = this.chain.store;
     const contractAddress = this.registerContractInstance(sender, codeId);
+    let debugMsgs: string[] = [];
 
     // then call instantiate
     let response = await this.callInstantiate(
       sender,
       funds,
       contractAddress,
-      instantiateMsg
+      instantiateMsg,
+      debugMsgs
     );
 
     if ('error' in response) {
+      // revert the contract instance registration
+      this.lastInstanceId -= 1;
+      this.deleteContractInfo(contractAddress);
+      this.chain.store = snapshot;
+      trace.push({
+        type: 'instantiate' as 'instantiate',
+        contractAddress,
+        msg: instantiateMsg,
+        response,
+        info: {
+          sender,
+          funds,
+        },
+        debugMsgs,
+      });
       return Err(response.error);
     } else {
       let customEvent: Event.Data = {
@@ -303,11 +330,30 @@ export class WasmModule {
         customEvent,
         response.ok
       );
-      return await this.handleContractResponse(
+
+      let subtrace: TraceLog[] = [];
+
+      let result = await this.handleContractResponse(
         contractAddress,
         response.ok.messages,
-        res
+        res,
+        subtrace
       );
+
+      trace.push({
+        type: 'instantiate' as 'instantiate',
+        contractAddress,
+        msg: instantiateMsg,
+        response,
+        info: {
+          sender,
+          funds,
+        },
+        debugMsgs,
+        trace: subtrace,
+      });
+
+      return result;
     }
   }
 
