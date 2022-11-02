@@ -1,9 +1,9 @@
 import { QuerierBase } from '@terran-one/cosmwasm-vm-js';
 import { Map } from 'immutable';
-import { Result, Err } from 'ts-results';
+import { Err, Result } from 'ts-results';
 import { WasmModule } from './modules/wasm';
 import { BankModule, BankQuery } from './modules/bank';
-import { AppResponse } from './cw-interface';
+import { AppResponse } from './types';
 
 export interface CWSimulateAppOptions {
   chainId: string;
@@ -49,21 +49,19 @@ export class CWSimulateApp {
   }
 }
 
-type QueryMessage =
-  | {
-      bank: BankQuery;
-    }
+type QueryMessage = {
+  bank: BankQuery;
+};
 
 export class Querier extends QuerierBase {
   constructor(public readonly app: CWSimulateApp) {
     super();
   }
-  
+
   handleQuery(query: QueryMessage) {
     if ('bank' in query) {
       return this.app.bank.handleQuery(query.bank);
-    }
-    else {
+    } else {
       return Err('Unknown query message');
     }
   }

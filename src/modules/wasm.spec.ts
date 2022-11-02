@@ -1,19 +1,12 @@
 import { readFileSync } from 'fs';
 import { CWSimulateApp } from '../CWSimulateApp';
-import { AppResponse, Event } from '../cw-interface';
+import { AppResponse, Event, ReplyOn } from '../types';
 import { toBase64 } from '@cosmjs/encoding';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
 interface MsgCommand {
   msg: any;
-}
-
-enum ReplyOn {
-  SUCCESS = 'success',
-  AlWAYS = 'always',
-  ERROR = 'error',
-  NEVER = 'never',
 }
 
 interface SubCommand {
@@ -100,7 +93,7 @@ function err(msg: string): ThrowCommand {
   };
 }
 
-function event(ty: string, attrs: [string, string][]): Event.Data {
+function event(ty: string, attrs: [string, string][]): Event {
   return {
     type: ty,
     attributes: attrs.map(([k, v]) => ({ key: k, value: v })),
@@ -185,8 +178,8 @@ describe('Events', function () {
 
   it('submessages and replies', async () => {
     let executeMsg = run(
-      sub(1, run(msg(push('N1'))), ReplyOn.SUCCESS),
-      sub(2, run(err('error-S2')), ReplyOn.ERROR)
+      sub(1, run(msg(push('N1'))), ReplyOn.Success),
+      sub(2, run(err('error-S2')), ReplyOn.Error)
     );
 
     let res = await app.wasm.executeContract(
@@ -228,11 +221,11 @@ describe('Events', function () {
 
   it('nested submessages', async () => {
     let executeMsg = run(
-      sub(1, run(msg(push('N1'))), ReplyOn.SUCCESS),
+      sub(1, run(msg(push('N1'))), ReplyOn.Success),
       sub(
         1,
-        run(sub(1, run(msg(push('N2'))), ReplyOn.SUCCESS)),
-        ReplyOn.SUCCESS
+        run(sub(1, run(msg(push('N2'))), ReplyOn.Success)),
+        ReplyOn.Success
       )
     );
 
@@ -340,7 +333,7 @@ describe('Rollback', function () {
   it('partial rollback - submessages', async () => {
     let executeMsg = run(
       msg(push('A')),
-      sub(2, run(msg(push('B')), msg(push('C')), err('error')), ReplyOn.ERROR),
+      sub(2, run(msg(push('B')), msg(push('C')), err('error')), ReplyOn.Error),
       msg(push('D'))
     );
 
@@ -367,11 +360,11 @@ describe('Rollback', function () {
           sub(
             2,
             run(msg(push('C')), msg(push('D')), err('error')),
-            ReplyOn.ERROR
+            ReplyOn.Error
           ),
           msg(push('E'))
         ),
-        ReplyOn.SUCCESS
+        ReplyOn.Success
       ),
       msg(push('F'))
     );
@@ -453,9 +446,9 @@ describe('TraceLog', () => {
 
   it('works', async () => {
     let executeMsg = run(
-      sub(1, debug('S1'), ReplyOn.SUCCESS),
+      sub(1, debug('S1'), ReplyOn.Success),
       msg(push('M1')),
-      sub(1, run(sub(1, debug('S2'), ReplyOn.SUCCESS)), ReplyOn.SUCCESS)
+      sub(1, run(sub(1, debug('S2'), ReplyOn.Success)), ReplyOn.Success)
     );
 
     let trace: any[] = [];

@@ -1,21 +1,27 @@
 import { Sha256 } from '@cosmjs/crypto';
-import { fromAscii, fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
+import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
 import { CWSimulateApp } from 'CWSimulateApp';
 import {
   BasicBackendApi,
   BasicKVIterStorage,
-  BasicQuerier,
   IBackend,
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
-import { ContractResponse, Event, RustResult, SubMsg } from '../cw-interface';
+import {
+  AppResponse,
+  CodeInfo,
+  Coin,
+  ContractInfo,
+  ContractResponse,
+  Event,
+  ReplyMsg,
+  ReplyOn,
+  RustResult,
+  SubMsg,
+  TraceLog,
+} from '../types';
 import { Map } from 'immutable';
-import { Result, Ok, Err } from 'ts-results';
-
-export interface AppResponse {
-  events: Event.Data[];
-  data: string | null;
-}
+import { Err, Ok, Result } from 'ts-results';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -23,11 +29,6 @@ function numberToBigEndianUint64(n: number): Uint8Array {
   view.setUint32(0, n, false);
   view.setUint32(4, 0, false);
   return new Uint8Array(buffer);
-}
-
-export interface Coin {
-  denom: string;
-  amount: string;
 }
 
 export interface Execute {
@@ -44,54 +45,9 @@ export interface Instantiate {
   label: string;
 }
 
-export type ReplyMsg = {
-  id: number;
-  result: RustResult<{
-    events: Event.Data[];
-    data: string | null;
-  }>;
-};
-
 export type WasmMsg =
   | { wasm: { execute: Execute } }
   | { wasm: { instantiate: Instantiate } };
-
-export interface CodeInfo {
-  creator: string;
-  wasmCode: Uint8Array;
-}
-
-export interface ContractInfo {
-  codeId: number;
-  creator: string;
-  admin: string | null;
-  label: string;
-  created: number; // chain height
-}
-
-export interface ExecuteTraceLog {
-  type: 'execute' | 'instantiate';
-  contractAddress: string;
-  info: {
-    sender: string;
-    funds: Coin[];
-  };
-  msg: any;
-  response: RustResult<ContractResponse.Data>;
-  debugMsgs: string[];
-  trace?: TraceLog[];
-}
-
-export interface ReplyTraceLog {
-  type: 'reply';
-  contractAddress: string;
-  msg: ReplyMsg;
-  response: RustResult<ContractResponse.Data>;
-  debugMsgs: string[];
-  trace?: TraceLog[];
-}
-
-export type TraceLog = ExecuteTraceLog | ReplyTraceLog;
 
 export class WasmModule {
   public lastCodeId: number;
@@ -261,13 +217,13 @@ export class WasmModule {
     contractAddress: string,
     instantiateMsg: any,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse.Data>> {
+  ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
     let res = vm.instantiate(env, info, instantiateMsg)
-      .json as RustResult<ContractResponse.Data>;
+      .json as RustResult<ContractResponse>;
 
     this.setContractStorage(
       contractAddress,
@@ -318,7 +274,7 @@ export class WasmModule {
       });
       return Err(response.error);
     } else {
-      let customEvent: Event.Data = {
+      let customEvent: Event = {
         type: 'instantiate',
         attributes: [
           { key: '_contract_address', value: contractAddress },
@@ -363,14 +319,14 @@ export class WasmModule {
     contractAddress: string,
     executeMsg: any,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse.Data>> {
+  ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
 
     let res = vm.execute(env, info, executeMsg)
-      .json as RustResult<ContractResponse.Data>;
+      .json as RustResult<ContractResponse>;
 
     this.setContractStorage(
       contractAddress,
@@ -453,7 +409,7 @@ export class WasmModule {
 
   async handleContractResponse(
     contractAddress: string,
-    messages: ContractResponse.Data['messages'],
+    messages: ContractResponse['messages'],
     res: AppResponse,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
@@ -476,7 +432,7 @@ export class WasmModule {
 
   async executeSubmsg(
     contractAddress: string,
-    message: SubMsg.Data,
+    message: SubMsg,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let { id, msg, gas_limit, reply_on } = message;
@@ -484,7 +440,7 @@ export class WasmModule {
     if (r.ok) {
       // submessage success
       let { events, data } = r.val;
-      if (reply_on === 'success' || reply_on === 'always') {
+      if (reply_on === ReplyOn.Success || reply_on === ReplyOn.Always) {
         // submessage success, call reply
         let replyMsg: ReplyMsg = {
           id,
@@ -513,7 +469,7 @@ export class WasmModule {
       return Ok({ events, data });
     } else {
       // submessage failed
-      if (reply_on === 'error' || reply_on === 'always') {
+      if (reply_on === ReplyOn.Error || reply_on === ReplyOn.Always) {
         // submessage failed, call reply
         let replyMsg: ReplyMsg = {
           id,
@@ -541,10 +497,10 @@ export class WasmModule {
     contractAddress: string,
     replyMsg: ReplyMsg,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse.Data>> {
+  ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
-      .json as RustResult<ContractResponse.Data>;
+      .json as RustResult<ContractResponse>;
 
     this.setContractStorage(
       contractAddress,
@@ -628,8 +584,8 @@ export class WasmModule {
 
   buildAppResponse(
     contract: string,
-    customEvent: Event.Data,
-    response: ContractResponse.Data
+    customEvent: Event,
+    response: ContractResponse
   ): AppResponse {
     let appEvents = [];
     // add custom event
