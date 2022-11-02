@@ -403,7 +403,7 @@ describe('Data', () => {
   });
 
   it('control case', async () => {
-    let executeMsg = run(data([1]));
+    let executeMsg = run(msg(push("S1")), data([1]));
 
     let res = await app.wasm.executeContract(
       info.sender,

@@ -48,6 +48,19 @@ export type WasmMsg =
   | { wasm: { execute: Execute } }
   | { wasm: { instantiate: Instantiate } };
 
+export interface CodeInfo {
+  creator: string;
+  wasmCode: Uint8Array;
+}
+
+export interface ContractInfo {
+  codeId: number;
+  creator: string;
+  admin: string | null;
+  label: string;
+  created: number; // chain height
+}
+
 export class WasmModule {
   public lastCodeId: number;
   public lastInstanceId: number;
@@ -81,16 +94,54 @@ export class WasmModule {
     return hash.slice(0, 20);
   }
 
+  setContractStorage(contractAddress: string, value: any) {
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'contractStorage', contractAddress],
+      value
+    );
+  }
+
+  getContractStorage(contractAddress: string): Map<string, any> {
+    return this.chain.store.getIn([
+      'wasm',
+      'contractStorage',
+      contractAddress,
+    ]) as Map<string, string>;
+  }
+
+  setCodeInfo(codeId: number, codeInfo: CodeInfo) {
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'codes', codeId],
+      codeInfo
+    );
+  }
+
+  getCodeInfo(codeId: number): CodeInfo {
+    return this.chain.store.getIn(['wasm', 'codes', codeId]) as CodeInfo;
+  }
+
+  setContractInfo(contractAddress: string, contractInfo: ContractInfo) {
+    this.chain.store = this.chain.store.setIn(
+      ['wasm', 'contracts', contractAddress],
+      contractInfo
+    );
+  }
+
+  getContractInfo(contractAddress: string): ContractInfo | undefined {
+    return this.chain.store.getIn([
+      'wasm',
+      'contracts',
+      contractAddress,
+    ]) as ContractInfo;
+  }
+
   create(creator: string, wasmCode: Uint8Array): number {
     let codeInfo = {
       creator,
       wasmCode,
     };
 
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'codes', this.lastCodeId + 1],
-      codeInfo
-    );
+    this.setCodeInfo(this.lastCodeId + 1, codeInfo);
     this.lastCodeId += 1;
     return this.lastCodeId;
   }
@@ -109,27 +160,25 @@ export class WasmModule {
   }
 
   async buildVM(contractAddress: string): Promise<VMInstance> {
-    // @ts-ignore
-    let { codeId } = this.chain.store.getIn([
-      'wasm',
-      'contracts',
-      contractAddress,
-    ]);
-    // @ts-ignore
-    let { wasmCode } = this.chain.store.getIn(['wasm', 'codes', codeId]);
+    const contractInfo = this.getContractInfo(contractAddress);
+    if (!contractInfo) {
+      throw new Error(`contract ${contractAddress} not found`);
+    }
 
-    let contractState = this.chain.store.getIn([
-      'wasm',
-      'contractStorage',
-      contractAddress,
-    ]) as Map<string, any>;
+    const { codeId } = contractInfo;
+    const codeInfo = this.getCodeInfo(codeId);
+    if (!codeInfo) {
+      throw new Error(`code ${codeId} not found`);
+    }
+
+    const { wasmCode } = codeInfo;
+    const contractState = this.getContractStorage(contractAddress);
 
     let storage = new BasicKVIterStorage();
     storage.dict = contractState;
 
     let backend: IBackend = {
       backend_api: new BasicBackendApi(this.chain.bech32Prefix),
-      // @ts-ignore
       storage,
       querier: new BasicQuerier(),
     };
@@ -159,14 +208,9 @@ export class WasmModule {
       created: this.chain.height,
     };
 
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contracts', contractAddress],
-      contractInfo
-    );
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
-      Map<string, any>()
-    );
+    this.setContractInfo(contractAddress, contractInfo);
+    this.setContractStorage(contractAddress, Map<string, string>());
+
     this.lastInstanceId += 1;
     return contractAddress;
   }
@@ -184,8 +228,8 @@ export class WasmModule {
     let res = vm.instantiate(env, info, instantiateMsg)
       .json as RustResult<ContractResponse.Data>;
 
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
+    this.setContractStorage(
+      contractAddress,
       (vm.backend.storage as BasicKVIterStorage).dict
     );
 
@@ -246,8 +290,8 @@ export class WasmModule {
     let res = vm.execute(env, info, executeMsg)
       .json as RustResult<ContractResponse.Data>;
 
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
+    this.setContractStorage(
+      contractAddress,
       (vm.backend.storage as BasicKVIterStorage).dict
     );
 
@@ -326,7 +370,7 @@ export class WasmModule {
         return subres;
       } else {
         res.events = [...res.events, ...subres.val.events];
-        if (subres.val.data === null) {
+        if (subres.val.data !== null) {
           res.data = subres.val.data;
         }
       }
@@ -406,8 +450,8 @@ export class WasmModule {
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
       .json as RustResult<ContractResponse.Data>;
 
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
+    this.setContractStorage(
+      contractAddress,
       (vm.backend.storage as BasicKVIterStorage).dict
     );
 
