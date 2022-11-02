@@ -1,8 +1,8 @@
 import { QuerierBase } from '@terran-one/cosmwasm-vm-js';
-import { Map } from 'immutable';
 import { Err, Result } from 'ts-results';
 import { WasmModule } from './modules/wasm';
 import { BankModule, BankQuery } from './modules/bank';
+import Transactional from './transactional';
 import { AppResponse } from './types';
 
 export interface CWSimulateAppOptions {
@@ -14,7 +14,7 @@ export class CWSimulateApp {
   public chainId: string;
   public bech32Prefix: string;
 
-  public store: Map<string, any>;
+  public store: Transactional;
   public height: number;
   public time: number;
 
@@ -25,7 +25,7 @@ export class CWSimulateApp {
   constructor(options: CWSimulateAppOptions) {
     this.chainId = options.chainId;
     this.bech32Prefix = options.bech32Prefix;
-    this.store = Map<string, any>();
+    this.store = new Transactional();
     this.height = 1;
     this.time = 0;
 

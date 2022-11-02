@@ -1,8 +1,8 @@
 import { Coin } from '@cosmjs/amino';
 import { toAscii } from '@cosmjs/encoding';
-import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
 import { CWSimulateApp } from '../CWSimulateApp';
+import type { Substorage } from '../transactional';
 
 export interface AppResponse {
   events: any[];
@@ -38,11 +38,20 @@ export type BankQuery =
 export type BalanceResponse = { amount: Coin };
 export type AllBalancesResponse = { amount: Coin[] };
 
+type BankStorage = {
+  balances: {
+    [account: string]: Coin[];
+  };
+}
+
 export class BankModule {
   public static STORE_KEY: Uint8Array = toAscii('bank');
+  public readonly store: Substorage<BankStorage>;
 
   constructor(public chain: CWSimulateApp) {
-    this.chain.store.set('bank', {'balances': {}});
+    this.store = this.chain.store.substorage('bank', {
+      balances: {},
+    });
   }
 
   public send(sender: string, recipient: string, amount: Coin[]): Result<void, string> {
@@ -105,18 +114,18 @@ export class BankModule {
   }
 
   public setBalance(address: string, amount: Coin[]) {
-    this.chain.store = this.chain.store.setIn(
-        ['bank', 'balances', address],
-        amount
-    );
+    this.store.tx(state => {
+      state.balances[address] = amount;
+      return state;
+    });
   }
 
   public getBalance(address: string): ParsedCoin[] {
-    return (this.getBalances().get(address) ?? []).map(ParsedCoin.fromCoin);
+    return this.store.read(state => state.balances[address]?.map(ParsedCoin.fromCoin) ?? []);
   }
   
   public getBalances() {
-    return (this.chain.store.getIn(['bank', 'balances'], Map([])) as Map<string, Coin[]>);
+    return this.store.read(state => state.balances);
   }
 
   public async handleMsg(

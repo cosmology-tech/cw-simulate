@@ -28,10 +28,10 @@ describe('BankModule', () => {
     // Assert
     expect(bank.getBalance('alice')).toEqual([new ParsedCoin('foo', BigInt(900))]);
     expect(bank.getBalance('bob')).toEqual([new ParsedCoin('foo', BigInt(100))]);
-    expect(bank.getBalances()).toEqual(Map([
-      ['alice', [{denom: 'foo', amount: '900'}]],
-      ['bob',   [{denom: 'foo', amount: '100'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      alice: [{denom: 'foo', amount: '900'}],
+      bob:   [{denom: 'foo', amount: '100'}],
+    });
   });
 
   it('handle send failure', () => {
@@ -44,9 +44,9 @@ describe('BankModule', () => {
 
     // Assert
     expect(res.err).toBeDefined();
-    expect(bank.getBalances()).toEqual(Map([
-      ['alice', [{denom: 'foo', amount: '100'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      alice: [{denom: 'foo', amount: '100'}],
+    });
     expect(bank.getBalance('alice')).toEqual([new ParsedCoin('foo', BigInt(100))]);
   });
 
@@ -60,9 +60,9 @@ describe('BankModule', () => {
 
     // Assert
     expect(bank.getBalance('alice')).toEqual([new ParsedCoin('foo', BigInt(900))]);
-    expect(bank.getBalances()).toEqual(Map([
-      ['alice', [{denom: 'foo', amount: '900'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      alice: [{denom: 'foo', amount: '900'}],
+    });
   });
 
   it('handle burn failure', () => {
@@ -76,9 +76,9 @@ describe('BankModule', () => {
     // Assert
     expect(res.err).toBeDefined()
     expect(bank.getBalance('alice')).toEqual([new ParsedCoin('foo', BigInt(100))]);
-    expect(bank.getBalances()).toEqual(Map([
-      ['alice', [{denom: 'foo', amount: '100'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      alice: [{denom: 'foo', amount: '100'}],
+    });
   });
 
   it('handle msg', () => {
@@ -98,10 +98,10 @@ describe('BankModule', () => {
     chain.handleMsg('alice', msg);
 
     // Assert
-    expect(bank.getBalances()).toEqual(Map([
-      ['alice', [{denom: 'foo', amount: '900'}]],
-      ['bob',   [{denom: 'foo', amount: '100'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      alice: [{denom: 'foo', amount: '900'}],
+      bob:   [{denom: 'foo', amount: '100'}],
+    });
   });
 
   it('contract integration', async () => {
@@ -134,11 +134,11 @@ describe('BankModule', () => {
 
     // Assert
     expect(res.ok).toBeTruthy();
-    expect(bank.getBalances()).toEqual(Map([
-      [contract.address, [{denom: 'foo', amount: '700'}]],
-      ['alice', [{denom: 'foo', amount: '100'}]],
-      ['bob',   [{denom: 'foo', amount: '100'}]],
-    ]));
+    expect(bank.getBalances()).toEqual({
+      [contract.address]: [{denom: 'foo', amount: '700'}],
+      alice: [{denom: 'foo', amount: '100'}],
+      bob:   [{denom: 'foo', amount: '100'}],
+    });
   });
   
   it('querier integration', () => {

@@ -22,6 +22,8 @@ import {
 } from '../types';
 import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
+import type { Substorage } from '../transactional';
+import { fromRustResult, toRustResult } from '../util';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -45,19 +47,35 @@ export interface Instantiate {
   label: string;
 }
 
+type WasmStorage = {
+  lastCodeId: number;
+  lastInstanceId: number;
+  codes: {
+    [codeId: number]: CodeInfo;
+  };
+  contracts: {
+    [contractAddress: string]: ContractInfo;
+  };
+  contractStorage: {
+    [contractAddress: string]: Record<string, string>;
+  };
+}
+
 export type WasmMsg =
   | { wasm: { execute: Execute } }
   | { wasm: { instantiate: Instantiate } };
 
 export class WasmModule {
-  public lastCodeId: number;
-  public lastInstanceId: number;
+  public readonly store: Substorage<WasmStorage>;
 
   constructor(public chain: CWSimulateApp) {
-    chain.store.set('wasm', { codes: {}, contracts: {}, contractStorage: {} });
-
-    this.lastCodeId = 0;
-    this.lastInstanceId = 0;
+    this.store = chain.store.substorage('wasm', {
+      lastCodeId: 0,
+      lastInstanceId: 0,
+      codes: {},
+      contracts: {},
+      contractStorage: {},
+    });
   }
 
   static buildContractAddress(codeId: number, instanceId: number): Uint8Array {
@@ -82,67 +100,60 @@ export class WasmModule {
     return hash.slice(0, 20);
   }
 
-  setContractStorage(contractAddress: string, value: Map<string, string>) {
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contractStorage', contractAddress],
-      value
-    );
+  setContractStorage(contractAddress: string, value: Record<string, string>) {
+    this.store.tx(state => {
+      state.contractStorage[contractAddress] = value;
+    });
   }
 
-  getContractStorage(contractAddress: string): Map<string, string> {
-    return this.chain.store.getIn([
-      'wasm',
-      'contractStorage',
-      contractAddress,
-    ]) as Map<string, string>;
+  getContractStorage(contractAddress: string) {
+    return this.store.read(state => state.contractStorage[contractAddress]);
   }
 
   setCodeInfo(codeId: number, codeInfo: CodeInfo) {
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'codes', codeId],
-      codeInfo
-    );
+    this.store.tx(state => {
+      state.codes[codeId] = codeInfo;
+    });
   }
 
   getCodeInfo(codeId: number): CodeInfo {
-    return this.chain.store.getIn(['wasm', 'codes', codeId]) as CodeInfo;
+    return this.store.read(state => state.codes[codeId]);
   }
 
   setContractInfo(contractAddress: string, contractInfo: ContractInfo) {
-    this.chain.store = this.chain.store.setIn(
-      ['wasm', 'contracts', contractAddress],
-      contractInfo
-    );
+    this.store.tx(state => {
+      state.contracts[contractAddress] = contractInfo;
+    });
   }
 
   getContractInfo(contractAddress: string): ContractInfo | undefined {
-    return this.chain.store.getIn([
-      'wasm',
-      'contracts',
-      contractAddress,
-    ]) as ContractInfo;
+    return this.store.read(state => state.contracts[contractAddress]);
   }
 
   deleteContractInfo(contractAddress: string) {
-    this.chain.store = this.chain.store.deleteIn([
-      'wasm',
-      'contracts',
-      contractAddress,
-    ]);
+    this.store.tx(state => {
+      delete state.contracts[contractAddress];
+    });
   }
 
   create(creator: string, wasmCode: Uint8Array): number {
-    let codeInfo = {
-      creator,
-      wasmCode,
-    };
-
-    this.setCodeInfo(this.lastCodeId + 1, codeInfo);
-    this.lastCodeId += 1;
-    return this.lastCodeId;
+    let codeId = -1;
+    this.store.tx(state => {
+      const { lastCodeId } = state;
+      const codeInfo = {
+        creator,
+        wasmCode,
+      };
+      
+      codeId = lastCodeId + 1;
+      
+      this.setCodeInfo(codeId, codeInfo);
+      state.lastCodeId = codeId;
+    });
+    return codeId;
   }
 
-  getExecutionEnv(contractAddress: string): any {
+  getExecutionEnv(contractAddress: string) {
     return {
       block: {
         height: this.chain.height,
@@ -171,7 +182,7 @@ export class WasmModule {
     const contractState = this.getContractStorage(contractAddress);
 
     let storage = new BasicKVIterStorage();
-    storage.dict = contractState;
+    storage.dict = Map<string, string>(Object.entries(contractState));
 
     let backend: IBackend = {
       backend_api: new BasicBackendApi(this.chain.bech32Prefix),
@@ -186,29 +197,31 @@ export class WasmModule {
 
   // TODO: add admin, label, etc.
   registerContractInstance(sender: string, codeId: number): string {
-    const contractAddressHash = WasmModule.buildContractAddress(
-      codeId,
-      this.lastInstanceId + 1
-    );
+    return this.store.tx(state => {
+      const contractAddressHash = WasmModule.buildContractAddress(
+        codeId,
+        state.lastInstanceId + 1
+      );
 
-    const contractAddress = toBech32(
-      this.chain.bech32Prefix,
-      contractAddressHash
-    );
+      const contractAddress = toBech32(
+        this.chain.bech32Prefix,
+        contractAddressHash
+      );
 
-    const contractInfo = {
-      codeId,
-      creator: sender,
-      admin: null,
-      label: '',
-      created: this.chain.height,
-    };
+      const contractInfo = {
+        codeId,
+        creator: sender,
+        admin: null,
+        label: '',
+        created: this.chain.height,
+      };
 
-    this.setContractInfo(contractAddress, contractInfo);
-    this.setContractStorage(contractAddress, Map<string, string>());
+      this.setContractInfo(contractAddress, contractInfo);
+      this.setContractStorage(contractAddress, {});
 
-    this.lastInstanceId += 1;
-    return contractAddress;
+      state.lastInstanceId += 1;
+      return contractAddress;
+    }).unwrap();
   }
 
   async callInstantiate(
@@ -217,7 +230,7 @@ export class WasmModule {
     contractAddress: string,
     instantiateMsg: any,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse>> {
+  ) {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
@@ -227,12 +240,12 @@ export class WasmModule {
 
     this.setContractStorage(
       contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
+      Object.fromEntries((vm.backend.storage as BasicKVIterStorage).dict.entries()),
     );
 
     debugMsgs.push(...vm.debugMsgs);
 
-    return res;
+    return fromRustResult(res);
   }
 
   async instantiateContract(
@@ -242,75 +255,74 @@ export class WasmModule {
     instantiateMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    // first register the contract instance
-    let snapshot = this.chain.store;
-    const contractAddress = this.registerContractInstance(sender, codeId);
-    let debugMsgs: string[] = [];
-
-    // then call instantiate
-    let response = await this.callInstantiate(
-      sender,
-      funds,
-      contractAddress,
-      instantiateMsg,
-      debugMsgs
-    );
-
-    if ('error' in response) {
-      // revert the contract instance registration
-      this.lastInstanceId -= 1;
-      this.deleteContractInfo(contractAddress);
-      this.chain.store = snapshot;
-      trace.push({
-        type: 'instantiate' as 'instantiate',
+    return await this.store.tx(async () => {
+      // first register the contract instance
+      const contractAddress = this.registerContractInstance(sender, codeId);
+      console.log(contractAddress)
+      let debugMsgs: string[] = [];
+  
+      // then call instantiate
+      let response = await this.callInstantiate(
+        sender,
+        funds,
         contractAddress,
-        msg: instantiateMsg,
-        response,
-        info: {
-          sender,
-          funds,
-        },
-        debugMsgs,
-      });
-      return Err(response.error);
-    } else {
-      let customEvent: Event = {
-        type: 'instantiate',
-        attributes: [
-          { key: '_contract_address', value: contractAddress },
-          { key: 'code_id', value: codeId.toString() },
-        ],
-      };
-      let res = this.buildAppResponse(
-        contractAddress,
-        customEvent,
-        response.ok
+        instantiateMsg,
+        debugMsgs
       );
 
-      let subtrace: TraceLog[] = [];
-
-      let result = await this.handleContractResponse(
-        contractAddress,
-        response.ok.messages,
-        res,
-        subtrace
-      );
-
-      trace.push({
-        type: 'instantiate' as 'instantiate',
-        contractAddress,
-        msg: instantiateMsg,
-        response,
-        info: {
-          sender,
-          funds,
-        },
-        debugMsgs,
-        trace: subtrace,
-      });
-
-      return result;
-    }
+      if (response.err) {
+        trace.push({
+          type: 'instantiate',
+          contractAddress,
+          msg: instantiateMsg,
+          response: toRustResult(response),
+          info: {
+            sender,
+            funds,
+          },
+          debugMsgs,
+        });
+        return response;
+      }
+      else {
+        let customEvent: Event = {
+          type: 'instantiate',
+          attributes: [
+            { key: '_contract_address', value: contractAddress },
+            { key: 'code_id', value: codeId.toString() },
+          ],
+        };
+        let res = this.buildAppResponse(
+          contractAddress,
+          customEvent,
+          response.val
+        );
+  
+        let subtrace: TraceLog[] = [];
+  
+        const result = await this.handleContractResponse(
+          contractAddress,
+          response.val.messages,
+          res,
+          subtrace
+        );
+  
+        trace.push({
+          type: 'instantiate',
+          contractAddress,
+          msg: instantiateMsg,
+          response: toRustResult(response),
+          info: {
+            sender,
+            funds,
+          },
+          debugMsgs,
+          trace: subtrace,
+        });
+        
+        return result;
+      }
+    });
   }
 
   async callExecute(
@@ -319,7 +331,7 @@ export class WasmModule {
     contractAddress: string,
     executeMsg: any,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse>> {
+  ) {
     let vm = await this.buildVM(contractAddress);
 
     let env = this.getExecutionEnv(contractAddress);
@@ -330,12 +342,12 @@ export class WasmModule {
 
     this.setContractStorage(
       contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
+      Object.fromEntries((vm.backend.storage as BasicKVIterStorage).dict.entries()),
     );
 
     debugMsgs.push(...vm.debugMsgs);
 
-    return res;
+    return fromRustResult(res);
   }
 
   async executeContract(
@@ -345,66 +357,73 @@ export class WasmModule {
     executeMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let snapshot = this.chain.store;
-    let debugMsgs: string[] = [];
-    let response = await this.callExecute(
-      sender,
-      funds,
-      contractAddress,
-      executeMsg,
-      debugMsgs
-    );
-    if ('error' in response) {
-      this.chain.store = snapshot; // revert
-      trace.push({
-        type: 'execute' as 'execute',
+    return await this.store.tx(async () => {
+      let debugMsgs: string[] = [];
+      let response = await this.callExecute(
+        sender,
+        funds,
         contractAddress,
-        msg: executeMsg,
-        response,
-        info: {
-          sender,
-          funds,
-        },
-        trace: [],
-        debugMsgs,
-      });
-      return Err(response.error);
-    } else {
-      let customEvent = {
-        type: 'execute',
-        attributes: [
-          {
-            key: '_contract_addr',
-            value: contractAddress,
+        executeMsg,
+        debugMsgs
+      );
+      
+      if (response.err) {
+        trace.push({
+          type: 'execute',
+          contractAddress,
+          msg: executeMsg,
+          response: toRustResult(response),
+          info: {
+            sender,
+            funds,
           },
-        ],
-      };
-      let res = this.buildAppResponse(
-        contractAddress,
-        customEvent,
-        response.ok
-      );
-      let subtrace: TraceLog[] = [];
-      let result = await this.handleContractResponse(
-        contractAddress,
-        response.ok.messages,
-        res,
-        subtrace
-      );
-      trace.push({
-        type: 'execute' as 'execute',
-        contractAddress,
-        msg: executeMsg,
-        response,
-        info: {
-          sender,
-          funds,
-        },
-        trace: subtrace,
-        debugMsgs,
-      });
-      return result;
-    }
+          trace: [],
+          debugMsgs,
+        });
+        return response;
+      }
+      else {
+        let customEvent = {
+          type: 'execute',
+          attributes: [
+            {
+              key: '_contract_addr',
+              value: contractAddress,
+            },
+          ],
+        };
+        
+        let res = this.buildAppResponse(
+          contractAddress,
+          customEvent,
+          response.val,
+        );
+        
+        let subtrace: TraceLog[] = [];
+        
+        let result = await this.handleContractResponse(
+          contractAddress,
+          response.val.messages,
+          res,
+          subtrace
+        );
+        
+        trace.push({
+          type: 'execute' as 'execute',
+          contractAddress,
+          msg: executeMsg,
+          response: toRustResult(response),
+          info: {
+            sender,
+            funds,
+          },
+          trace: subtrace,
+          debugMsgs,
+        });
+        
+        return result;
+      }
+    });
   }
 
   async handleContractResponse(
@@ -497,19 +516,21 @@ export class WasmModule {
     contractAddress: string,
     replyMsg: ReplyMsg,
     debugMsgs: string[] = []
-  ): Promise<RustResult<ContractResponse>> {
-    let vm = await this.buildVM(contractAddress);
-    let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
-      .json as RustResult<ContractResponse>;
+  ) {
+    return await this.store.tx(async () => {
+      let vm = await this.buildVM(contractAddress);
+      let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
+        .json as RustResult<ContractResponse>;
 
-    this.setContractStorage(
-      contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
-    );
+      this.setContractStorage(
+        contractAddress,
+        Object.fromEntries((vm.backend.storage as BasicKVIterStorage).dict.entries()),
+      );
 
-    debugMsgs.push(...vm.debugMsgs);
+      debugMsgs.push(...vm.debugMsgs);
 
-    return res;
+      return fromRustResult(res);
+    });
   }
 
   async reply(
@@ -517,54 +538,62 @@ export class WasmModule {
     replyMsg: ReplyMsg,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let debugMsgs: string[] = [];
-    let response = await this.callReply(contractAddress, replyMsg, debugMsgs);
-    if ('error' in response) {
-      trace.push({
-        type: 'reply' as 'reply',
-        contractAddress,
-        msg: replyMsg,
-        response,
-        debugMsgs,
-      });
-      return Err(response.error);
-    } else {
-      let customEvent = {
-        type: 'reply',
-        attributes: [
-          {
-            key: '_contract_addr',
-            value: contractAddress,
-          },
-          {
-            key: 'mode',
-            value:
-              'ok' in replyMsg.result ? 'handle_success' : 'handle_failure',
-          },
-        ],
-      };
-      let res = this.buildAppResponse(
-        contractAddress,
-        customEvent,
-        response.ok
-      );
-      let subtrace: TraceLog[] = [];
-      let result = await this.handleContractResponse(
-        contractAddress,
-        response.ok.messages,
-        res,
-        subtrace
-      );
-      trace.push({
-        type: 'reply' as 'reply',
-        contractAddress,
-        msg: replyMsg,
-        response,
-        trace: subtrace,
-        debugMsgs,
-      });
-      return result;
-    }
+    return await this.store.tx(async () => {
+      let debugMsgs: string[] = [];
+      let response = await this.callReply(contractAddress, replyMsg, debugMsgs);
+      
+      if (response.err) {
+        trace.push({
+          type: 'reply',
+          contractAddress,
+          msg: replyMsg,
+          response: toRustResult(response),
+          debugMsgs,
+        });
+        return response;
+      }
+      else {
+        let customEvent = {
+          type: 'reply',
+          attributes: [
+            {
+              key: '_contract_addr',
+              value: contractAddress,
+            },
+            {
+              key: 'mode',
+              value:
+                'ok' in replyMsg.result ? 'handle_success' : 'handle_failure',
+            },
+          ],
+        };
+        
+        let res = this.buildAppResponse(
+          contractAddress,
+          customEvent,
+          response.val,
+        );
+        
+        let subtrace: TraceLog[] = [];
+        
+        let result = await this.handleContractResponse(
+          contractAddress,
+          response.val.messages,
+          res,
+          subtrace
+        );
+        
+        trace.push({
+          type: 'reply' as 'reply',
+          contractAddress,
+          msg: replyMsg,
+          response: toRustResult(response),
+          trace: subtrace,
+          debugMsgs,
+        });
+        return result;
+      }
+    });
   }
 
   async query(
