@@ -212,7 +212,7 @@ export class WasmModule {
     let backend: IBackend = {
       backend_api: new BasicBackendApi(this.chain.bech32Prefix),
       storage,
-      querier: new BasicQuerier(),
+      querier: this.chain.querier,
     };
 
     let vm = new VMInstance(backend);

@@ -1,6 +1,6 @@
 {
   "name": "@terran-one/cw-simulate",
-  "version": "1.1.3",
+  "version": "2.0.1",
   "description": "Mock blockchain environment for simulating CosmWasm interactions",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=14"
+    "node": ">=18"
   },
   "repository": "https://github.com/terran-one/cw-simulate",
   "author": "Terran One LLC",
@@ -24,7 +24,7 @@
     "path-browserify": "^1.0.1",
     "prettier": "^2.7.1",
     "stream-browserify": "^3.0.0",
-    "ts-jest": "^28.0.8",
+    "ts-jest": "^29.0.3",
     "ts-loader": "^9.3.1",
     "tsconfig-paths-webpack-plugin": "^4.0.0",
     "typescript": "^4.8.2",
@@ -35,7 +35,7 @@
     "@cosmjs/amino": "^0.28.13",
     "@cosmjs/crypto": "^0.28.13",
     "@cosmjs/encoding": "^0.28.13",
-    "@terran-one/cosmwasm-vm-js": "^0.2.3",
+    "@terran-one/cosmwasm-vm-js": "^0.2.15",
     "@types/lodash": "^4.14.184",
     "immutable": "^4.1.0",
     "lobyte": "^0.0.3",

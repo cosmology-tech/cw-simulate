@@ -1,25 +1,57 @@
-name: Publish package to GitHub Packages
+name: Publish package to npm
+
 on:
-  workflow_dispatch: {}
   release:
     types: [created]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
-      contents: read
-      packages: write
+      contents: write
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
       - uses: actions/setup-node@v3
+        name: Set up node
         with:
-          node-version: '14.x'
-          registry-url: 'https://npm.pkg.github.com'
-          always-auth: true
-      - run: yarn
+          node-version: '18.x'
+          registry-url: 'https://registry.npmjs.org' # set up .npmrc file to publish to npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm publish
         env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
-      - run: yarn build && yarn publish
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Notify on success
+        if: success()
+        uses: slackapi/slack-github-action@v1.22.0
         env:
-          TOKEN_FOR_GITHUB: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": ":ship: A new version of <https://www.npmjs.com/package/@terran-one/cw-simulate|cw-simulate> has been published."
+            }
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.22.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": ":boom: Failed to publish <https://github.com/Terran-One/cw-simulate/actions/workflows/publish.yaml|cw-simulate>."
+            }
