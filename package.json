@@ -42,8 +42,7 @@
     "lodash": "^4.17.21",
     "ts-pattern": "^4.0.5",
     "ts-results": "^3.3.0",
-    "tslib": "^2.4.0",
-    "type-fest": "^3.1.0"
+    "tslib": "^2.4.0"
   },
   "scripts": {
     "build": "tsc --module commonjs && webpack --mode production",
