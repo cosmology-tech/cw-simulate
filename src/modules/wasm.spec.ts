@@ -88,6 +88,12 @@ function push(data: string) {
   };
 }
 
+function debug(msg: string) {
+  return {
+    debug: { msg },
+  };
+}
+
 function err(msg: string): ThrowCommand {
   return {
     throw: msg,
@@ -403,7 +409,7 @@ describe('Data', () => {
   });
 
   it('control case', async () => {
-    let executeMsg = run(msg(push("S1")), data([1]));
+    let executeMsg = run(msg(push('S1')), data([1]));
 
     let res = await app.wasm.executeContract(
       info.sender,
@@ -426,5 +432,72 @@ describe('Data', () => {
 
   it('if reply has no data, last data is used', async () => {
     // TODO: implement
+  });
+});
+
+describe('TraceLog', () => {
+  let contractAddress: string;
+
+  beforeEach(async () => {
+    let res = await app.wasm.instantiateContract(
+      info.sender,
+      info.funds,
+      codeId,
+      {}
+    );
+    if (res.err) {
+      throw new Error(res.val);
+    }
+    contractAddress = getContractAddress(res.val);
+  });
+
+  it('works', async () => {
+    let executeMsg = run(
+      sub(1, debug('S1'), ReplyOn.SUCCESS),
+      msg(push('M1')),
+      sub(1, run(sub(1, debug('S2'), ReplyOn.SUCCESS)), ReplyOn.SUCCESS)
+    );
+
+    let trace: any[] = [];
+    let res = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg,
+      trace
+    );
+
+    expect(trace).toMatchObject([
+      {
+        type: 'execute',
+        trace: [
+          {
+            type: 'execute', // S1
+            debugMsgs: ['S1'],
+          },
+          {
+            type: 'reply', // reply(S1)
+          },
+          {
+            type: 'execute', // M1
+          },
+          {
+            type: 'execute', // S2
+            trace: [
+              {
+                type: 'execute',
+                debugMsgs: ['S2'],
+              },
+              {
+                type: 'reply',
+              },
+            ],
+          },
+          {
+            type: 'reply', // reply(S2)
+          },
+        ],
+      },
+    ]);
   });
 });

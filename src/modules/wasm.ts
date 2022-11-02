@@ -8,12 +8,12 @@ import {
   IBackend,
   VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
-import { ContractResponse, RustResult, SubMsg } from '../cw-interface';
+import { ContractResponse, Event, RustResult, SubMsg } from '../cw-interface';
 import { Map } from 'immutable';
 import { Result, Ok, Err } from 'ts-results';
 
 export interface AppResponse {
-  events: any[];
+  events: Event.Data[];
   data: string | null;
 }
 
@@ -44,6 +44,14 @@ export interface Instantiate {
   label: string;
 }
 
+export type ReplyMsg = {
+  id: number;
+  result: RustResult<{
+    events: Event.Data[];
+    data: string | null;
+  }>;
+};
+
 export type WasmMsg =
   | { wasm: { execute: Execute } }
   | { wasm: { instantiate: Instantiate } };
@@ -60,6 +68,30 @@ export interface ContractInfo {
   label: string;
   created: number; // chain height
 }
+
+export interface ExecuteTraceLog {
+  type: 'execute';
+  contractAddress: string;
+  info: {
+    sender: string;
+    funds: Coin[];
+  };
+  msg: any;
+  response: RustResult<ContractResponse.Data>;
+  debugMsgs: string[];
+  trace?: TraceLog[];
+}
+
+export interface ReplyTraceLog {
+  type: 'reply';
+  contractAddress: string;
+  msg: ReplyMsg;
+  response: RustResult<ContractResponse.Data>;
+  debugMsgs: string[];
+  trace?: TraceLog[];
+}
+
+export type TraceLog = ExecuteTraceLog | ReplyTraceLog;
 
 export class WasmModule {
   public lastCodeId: number;
@@ -94,14 +126,14 @@ export class WasmModule {
     return hash.slice(0, 20);
   }
 
-  setContractStorage(contractAddress: string, value: any) {
+  setContractStorage(contractAddress: string, value: Map<string, string>) {
     this.chain.store = this.chain.store.setIn(
       ['wasm', 'contractStorage', contractAddress],
       value
     );
   }
 
-  getContractStorage(contractAddress: string): Map<string, any> {
+  getContractStorage(contractAddress: string): Map<string, string> {
     return this.chain.store.getIn([
       'wasm',
       'contractStorage',
@@ -219,7 +251,8 @@ export class WasmModule {
     sender: string,
     funds: Coin[],
     contractAddress: string,
-    instantiateMsg: any
+    instantiateMsg: any,
+    debugMsgs: string[] = []
   ): Promise<RustResult<ContractResponse.Data>> {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
@@ -232,6 +265,8 @@ export class WasmModule {
       contractAddress,
       (vm.backend.storage as BasicKVIterStorage).dict
     );
+
+    debugMsgs.push(...vm.debugMsgs);
 
     return res;
   }
@@ -256,7 +291,7 @@ export class WasmModule {
     if ('error' in response) {
       return Err(response.error);
     } else {
-      let customEvent = {
+      let customEvent: Event.Data = {
         type: 'instantiate',
         attributes: [
           { key: '_contract_address', value: contractAddress },
@@ -280,7 +315,8 @@ export class WasmModule {
     sender: string,
     funds: Coin[],
     contractAddress: string,
-    executeMsg: any
+    executeMsg: any,
+    debugMsgs: string[] = []
   ): Promise<RustResult<ContractResponse.Data>> {
     let vm = await this.buildVM(contractAddress);
 
@@ -295,6 +331,8 @@ export class WasmModule {
       (vm.backend.storage as BasicKVIterStorage).dict
     );
 
+    debugMsgs.push(...vm.debugMsgs);
+
     return res;
   }
 
@@ -303,23 +341,30 @@ export class WasmModule {
     funds: Coin[],
     contractAddress: string,
     executeMsg: any,
-    trace: any = []
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let snapshot = this.chain.store;
+    let debugMsgs: string[] = [];
     let response = await this.callExecute(
       sender,
       funds,
       contractAddress,
-      executeMsg
+      executeMsg,
+      debugMsgs
     );
     if ('error' in response) {
       this.chain.store = snapshot; // revert
       trace.push({
-        execute: {
-          contractAddress,
-          executeMsg,
-          error: response.error,
+        type: 'execute' as 'execute',
+        contractAddress,
+        msg: executeMsg,
+        response,
+        info: {
+          sender,
+          funds,
         },
+        trace: [],
+        debugMsgs,
       });
       return Err(response.error);
     } else {
@@ -337,7 +382,7 @@ export class WasmModule {
         customEvent,
         response.ok
       );
-      let subtrace: any = [];
+      let subtrace: TraceLog[] = [];
       let result = await this.handleContractResponse(
         contractAddress,
         response.ok.messages,
@@ -345,12 +390,16 @@ export class WasmModule {
         subtrace
       );
       trace.push({
-        execute: {
-          contractAddress,
-          executeMsg,
-          response: response.ok,
-          subcalls: subtrace,
+        type: 'execute' as 'execute',
+        contractAddress,
+        msg: executeMsg,
+        response,
+        info: {
+          sender,
+          funds,
         },
+        trace: subtrace,
+        debugMsgs,
       });
       return result;
     }
@@ -360,7 +409,7 @@ export class WasmModule {
     contractAddress: string,
     messages: ContractResponse.Data['messages'],
     res: AppResponse,
-    trace: any = []
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let snapshot = this.chain.store;
     for (const message of messages) {
@@ -382,7 +431,7 @@ export class WasmModule {
   async executeSubmsg(
     contractAddress: string,
     message: SubMsg.Data,
-    trace: any = []
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let { id, msg, gas_limit, reply_on } = message;
     let r = await this.chain.handleMsg(contractAddress, msg, trace);
@@ -391,7 +440,7 @@ export class WasmModule {
       let { events, data } = r.val;
       if (reply_on === 'success' || reply_on === 'always') {
         // submessage success, call reply
-        let replyMsg = {
+        let replyMsg: ReplyMsg = {
           id,
           result: {
             ok: {
@@ -420,7 +469,7 @@ export class WasmModule {
       // submessage failed
       if (reply_on === 'error' || reply_on === 'always') {
         // submessage failed, call reply
-        let replyMsg = {
+        let replyMsg: ReplyMsg = {
           id,
           result: {
             error: r.val,
@@ -444,7 +493,8 @@ export class WasmModule {
 
   async callReply(
     contractAddress: string,
-    replyMsg: any
+    replyMsg: ReplyMsg,
+    debugMsgs: string[] = []
   ): Promise<RustResult<ContractResponse.Data>> {
     let vm = await this.buildVM(contractAddress);
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
@@ -455,22 +505,25 @@ export class WasmModule {
       (vm.backend.storage as BasicKVIterStorage).dict
     );
 
+    debugMsgs.push(...vm.debugMsgs);
+
     return res;
   }
 
   async reply(
     contractAddress: string,
-    replyMsg: any,
-    trace: any = []
+    replyMsg: ReplyMsg,
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let response = await this.callReply(contractAddress, replyMsg);
+    let debugMsgs: string[] = [];
+    let response = await this.callReply(contractAddress, replyMsg, debugMsgs);
     if ('error' in response) {
       trace.push({
-        reply: {
-          contractAddress,
-          replyMsg,
-          error: response.error,
-        },
+        type: 'reply' as 'reply',
+        contractAddress,
+        msg: replyMsg,
+        response,
+        debugMsgs,
       });
       return Err(response.error);
     } else {
@@ -483,7 +536,8 @@ export class WasmModule {
           },
           {
             key: 'mode',
-            value: replyMsg.result.ok ? 'handle_success' : 'handle_failure',
+            value:
+              'ok' in replyMsg.result ? 'handle_success' : 'handle_failure',
           },
         ],
       };
@@ -492,7 +546,7 @@ export class WasmModule {
         customEvent,
         response.ok
       );
-      let subtrace: any = [];
+      let subtrace: TraceLog[] = [];
       let result = await this.handleContractResponse(
         contractAddress,
         response.ok.messages,
@@ -500,12 +554,12 @@ export class WasmModule {
         subtrace
       );
       trace.push({
-        reply: {
-          contractAddress,
-          replyMsg,
-          response: response.ok,
-          subcalls: subtrace,
-        },
+        type: 'reply' as 'reply',
+        contractAddress,
+        msg: replyMsg,
+        response,
+        trace: subtrace,
+        debugMsgs,
       });
       return result;
     }
@@ -528,7 +582,7 @@ export class WasmModule {
 
   buildAppResponse(
     contract: string,
-    customEvent: any,
+    customEvent: Event.Data,
     response: ContractResponse.Data
   ): AppResponse {
     let appEvents = [];
@@ -569,7 +623,7 @@ export class WasmModule {
   async handleMsg(
     sender: string,
     msg: any,
-    trace: any = []
+    trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let { wasm } = msg;
     if ('execute' in wasm) {
