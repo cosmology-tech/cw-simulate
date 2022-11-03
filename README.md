@@ -1,20 +1,22 @@
-# `cw-simulate`
+# CWSimulate
 
-This package combines `cosmwasm-vm-js` with additional abstractions and state management to
-more accurately simulate the effects of CosmWasm contracts on the blockchain environments on which
-they are hosted.
+CWSimulate is a simulation engine for running [CosmWasm](https://cosmwasm.com) smart contracts for JavaScript environments such as the browser or Node.js. Under the hood, it uses the [`cosmwasm-vm-js`](https://github.com/terran-one/cosmwasm-vm-js) runtime to invoke contract functions inside CosmWasm binaries compiled to WebAssembly (.wasm). The design is inspired by the Rust package [`cw-multi-test`](https://github.com/cosmwasm/cw-multi-test).  
+
+A basic web frontend called [`cw-simulate-ui`](https;//github.com/terran-one/cw-simulate-ui) is available where you can use CWSimulate interactively [here](https://cwsimulate.terran.one).
 
 ## Features
 
-- configure multiple host chain environments with chain-specific settings / state
-- multiple simultaneous contract instances can exist per chain
-- chain modules can be simulated through custom user code
+- handle multiple contract instances in one simulation environment
+- support for user-defined custom blockchain modules
 - extensible for further instrumentation via custom middlewares
+- handles submessages properly, with detailed execution traces
+- proper chain state rollback on errors
 
+## Installation
 
-## Getting Started
+CWSimulate is available on NPM at [`@terran-one/cw-simulate`](https://www.npmjs.com/package/@terran-one/cw-simulate).
 
-Import the `cw-simulate` library from NPM in your `package.json`.
+Import the `@terran-one/cw-simulate` library from NPM in your `package.json`.
 
 ```bash
 $ npm install -S @terran-one/cw-simulate
@@ -26,26 +28,17 @@ If you're using Yarn:
 $ yarn add @terran-one/cw-simulate
 ```
 
-## Usage
-
-1. Create a `CWSimulateApp` object - this is a simulation environment describing a single chain.
-2. As needed, per chain:
-   - Upload the WASM bytecode using `App.wasm.create`. This will register a new `codeId` to reference the uploaded contract code.
-   - Create a new contract instance using `App.wasm.instantiateContract`, passing in the `codeId` generated in the previous step.
-   - From the response, retrieve the `contractAddress` to refer to the contract instance.
-  - You can now run `execute` and `query` messages against the instance, and they should work as expected.
-
-### Example
+## Quickstart
 
 The following example creates a chain, instantiates a contract on it, and performs an `execute` and `query`.
 
-```javascript
+```typescript
 import { CWSimulateApp } from '@terran-one/cw-simulate';
 import { readFileSync } from 'fs';
 
 const sender = 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu';
 const funds = [];
-const wasmBytecode = readFileSync('cw-template.wasm');
+const wasmBytecode = readFileSync('./cw-template.wasm');
 
 const app = new CWSimulateApp({
   chainId: 'phoenix-1',
@@ -70,3 +63,25 @@ console.log('executeContract:', result.constructor.name, JSON.stringify(result, 
 result = await app.wasm.query(contractAddress, { get_count: {} });
 console.log('query:', result.constructor.name, JSON.stringify(result, null, 2));
 ```
+
+
+
+## Usage
+
+### Creating a new chain simulation
+
+
+
+
+
+## Development
+
+### Testing
+
+CWSimulate uses [`cw-simulate-tests`](https://github.com/terran-one/cw-simulate-tests), a smart contract designed to test the various components of this package.
+
+## License
+
+This software is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+Copyright © 2022 Terran One LLC
