@@ -68,6 +68,12 @@ export default class Transactional {
   read(name: string, filter = (v: any) => v) {
     return filter(cloneDeep(this._data[name]));
   }
+  
+  clone() {
+    const clone = new Transactional();
+    clone._data = cloneDeep(this._data);
+    return clone;
+  }
 }
 
 /** Substorage is a type bound interface to a partition of a `Transactional`'s data. */
