@@ -5,8 +5,9 @@ import {
   BasicBackendApi,
   BasicKVIterStorage,
   IBackend,
-  VMInstance,
 } from '@terran-one/cosmwasm-vm-js';
+import { CWSimulateVMInstance } from '../instrumentation/CWSimulateVMInstance';
+
 import {
   AppResponse,
   CodeInfo,
@@ -156,7 +157,7 @@ export class WasmModule {
     };
   }
 
-  async buildVM(contractAddress: string): Promise<VMInstance> {
+  async buildVM(contractAddress: string): Promise<CWSimulateVMInstance> {
     const contractInfo = this.getContractInfo(contractAddress);
     if (!contractInfo) {
       throw new Error(`contract ${contractAddress} not found`);
@@ -180,7 +181,7 @@ export class WasmModule {
       querier: this.chain.querier,
     };
 
-    let vm = new VMInstance(backend);
+    let vm = new CWSimulateVMInstance(backend);
     await vm.build(wasmCode);
     return vm;
   }
@@ -217,7 +218,8 @@ export class WasmModule {
     funds: Coin[],
     contractAddress: string,
     instantiateMsg: any,
-    debugMsgs: string[] = []
+    debugMsgs: string[] = [],
+    callHistory: any[] = []
   ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
     let env = this.getExecutionEnv(contractAddress);
@@ -232,6 +234,7 @@ export class WasmModule {
     );
 
     debugMsgs.push(...vm.debugMsgs);
+    callHistory.push(...vm.callHistory);
 
     return res;
   }
@@ -247,6 +250,7 @@ export class WasmModule {
     let snapshot = this.chain.store;
     const contractAddress = this.registerContractInstance(sender, codeId);
     let debugMsgs: string[] = [];
+    let callHistory: any[] = [];
 
     // then call instantiate
     let response = await this.callInstantiate(
@@ -254,7 +258,8 @@ export class WasmModule {
       funds,
       contractAddress,
       instantiateMsg,
-      debugMsgs
+      debugMsgs,
+      callHistory
     );
 
     if ('error' in response) {
@@ -273,6 +278,7 @@ export class WasmModule {
         },
         env: this.getExecutionEnv(contractAddress),
         debugMsgs,
+        callHistory,
         storeSnapshot: snapshot,
       });
       return Err(response.error);
@@ -310,6 +316,7 @@ export class WasmModule {
         },
         env: this.getExecutionEnv(contractAddress),
         debugMsgs,
+        callHistory,
         trace: subtrace,
         storeSnapshot: this.chain.store,
       });
@@ -323,7 +330,8 @@ export class WasmModule {
     funds: Coin[],
     contractAddress: string,
     executeMsg: any,
-    debugMsgs: string[] = []
+    debugMsgs: string[] = [],
+    callHistory: any[] = []
   ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
 
@@ -339,6 +347,7 @@ export class WasmModule {
     );
 
     debugMsgs.push(...vm.debugMsgs);
+    callHistory.push(...vm.callHistory);
 
     return res;
   }
@@ -352,12 +361,15 @@ export class WasmModule {
   ): Promise<Result<AppResponse, string>> {
     let snapshot = this.chain.store;
     let debugMsgs: string[] = [];
+    let callHistory: any[] = [];
+
     let response = await this.callExecute(
       sender,
       funds,
       contractAddress,
       executeMsg,
-      debugMsgs
+      debugMsgs,
+      callHistory
     );
     if ('error' in response) {
       this.chain.store = snapshot; // revert
@@ -372,6 +384,7 @@ export class WasmModule {
           funds,
         },
         debugMsgs,
+        callHistory,
         storeSnapshot: snapshot,
       });
       return Err(response.error);
@@ -409,6 +422,7 @@ export class WasmModule {
         env: this.getExecutionEnv(contractAddress),
         trace: subtrace,
         debugMsgs,
+        callHistory,
         storeSnapshot: this.chain.store,
       });
       return result;
@@ -504,7 +518,8 @@ export class WasmModule {
   async callReply(
     contractAddress: string,
     replyMsg: ReplyMsg,
-    debugMsgs: string[] = []
+    debugMsgs: string[] = [],
+    callHistory: any[] = []
   ): Promise<RustResult<ContractResponse>> {
     let vm = await this.buildVM(contractAddress);
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
@@ -516,6 +531,7 @@ export class WasmModule {
     );
 
     debugMsgs.push(...vm.debugMsgs);
+    callHistory.push(...vm.callHistory);
 
     return res;
   }
@@ -526,7 +542,13 @@ export class WasmModule {
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     let debugMsgs: string[] = [];
-    let response = await this.callReply(contractAddress, replyMsg, debugMsgs);
+    let callHistory: any[] = [];
+    let response = await this.callReply(
+      contractAddress,
+      replyMsg,
+      debugMsgs,
+      callHistory
+    );
     if ('error' in response) {
       trace.push({
         type: 'reply' as 'reply',
@@ -535,6 +557,7 @@ export class WasmModule {
         msg: replyMsg,
         response,
         debugMsgs,
+        callHistory,
         storeSnapshot: this.chain.store,
       });
       return Err(response.error);
@@ -573,6 +596,7 @@ export class WasmModule {
         response,
         trace: subtrace,
         debugMsgs,
+        callHistory,
         storeSnapshot: this.chain.store,
       });
       return result;

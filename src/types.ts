@@ -45,6 +45,8 @@ export interface ContractInfo {
   created: number; // chain height
 }
 
+export type CallHistoryLog = any;
+
 export interface ExecuteTraceLog {
   type: 'execute' | 'instantiate';
   contractAddress: string;
@@ -56,6 +58,7 @@ export interface ExecuteTraceLog {
   msg: any;
   response: RustResult<ContractResponse>;
   debugMsgs: string[];
+  callHistory: CallHistoryLog[];
   trace?: TraceLog[];
   storeSnapshot: Immutable.Map<string, any>;
 }
@@ -67,6 +70,7 @@ export interface ReplyTraceLog {
   msg: ReplyMsg;
   response: RustResult<ContractResponse>;
   debugMsgs: string[];
+  callHistory: CallHistoryLog[];
   trace?: TraceLog[];
   storeSnapshot: Immutable.Map<string, any>;
 }
