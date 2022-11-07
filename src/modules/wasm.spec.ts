@@ -451,6 +451,8 @@ describe('TraceLog', () => {
       sub(1, run(sub(1, debug('S2'), ReplyOn.Success)), ReplyOn.Success)
     );
 
+    console.log(JSON.stringify(executeMsg, null, 2));
+
     let trace: any[] = [];
     let res = await app.wasm.executeContract(
       info.sender,

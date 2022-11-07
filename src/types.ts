@@ -1,3 +1,5 @@
+import Immutable from 'immutable';
+
 export interface ContractResponse {
   messages: SubMsg[];
   events: Event[];
@@ -50,19 +52,23 @@ export interface ExecuteTraceLog {
     sender: string;
     funds: Coin[];
   };
+  env: ExecuteEnv;
   msg: any;
   response: RustResult<ContractResponse>;
   debugMsgs: string[];
   trace?: TraceLog[];
+  storeSnapshot: Immutable.Map<string, any>;
 }
 
 export interface ReplyTraceLog {
   type: 'reply';
   contractAddress: string;
+  env: ExecuteEnv;
   msg: ReplyMsg;
   response: RustResult<ContractResponse>;
   debugMsgs: string[];
   trace?: TraceLog[];
+  storeSnapshot: Immutable.Map<string, any>;
 }
 
 export type TraceLog = ExecuteTraceLog | ReplyTraceLog;
@@ -86,4 +92,15 @@ export type Binary = string;
 export interface Coin {
   denom: string;
   amount: string;
+}
+
+export interface ExecuteEnv {
+  block: {
+    height: number;
+    time: string;
+    chain_id: string;
+  };
+  contract: {
+    address: string;
+  };
 }

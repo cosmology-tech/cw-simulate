@@ -14,6 +14,7 @@ import {
   ContractInfo,
   ContractResponse,
   Event,
+  ExecuteEnv,
   ReplyMsg,
   ReplyOn,
   RustResult,
@@ -142,7 +143,7 @@ export class WasmModule {
     return this.lastCodeId;
   }
 
-  getExecutionEnv(contractAddress: string): any {
+  getExecutionEnv(contractAddress: string): ExecuteEnv {
     return {
       block: {
         height: this.chain.height,
@@ -270,7 +271,9 @@ export class WasmModule {
           sender,
           funds,
         },
+        env: this.getExecutionEnv(contractAddress),
         debugMsgs,
+        storeSnapshot: snapshot,
       });
       return Err(response.error);
     } else {
@@ -305,8 +308,10 @@ export class WasmModule {
           sender,
           funds,
         },
+        env: this.getExecutionEnv(contractAddress),
         debugMsgs,
         trace: subtrace,
+        storeSnapshot: this.chain.store,
       });
 
       return result;
@@ -361,12 +366,13 @@ export class WasmModule {
         contractAddress,
         msg: executeMsg,
         response,
+        env: this.getExecutionEnv(contractAddress),
         info: {
           sender,
           funds,
         },
-        trace: [],
         debugMsgs,
+        storeSnapshot: snapshot,
       });
       return Err(response.error);
     } else {
@@ -400,8 +406,10 @@ export class WasmModule {
           sender,
           funds,
         },
+        env: this.getExecutionEnv(contractAddress),
         trace: subtrace,
         debugMsgs,
+        storeSnapshot: this.chain.store,
       });
       return result;
     }
@@ -523,9 +531,11 @@ export class WasmModule {
       trace.push({
         type: 'reply' as 'reply',
         contractAddress,
+        env: this.getExecutionEnv(contractAddress),
         msg: replyMsg,
         response,
         debugMsgs,
+        storeSnapshot: this.chain.store,
       });
       return Err(response.error);
     } else {
@@ -559,9 +569,11 @@ export class WasmModule {
         type: 'reply' as 'reply',
         contractAddress,
         msg: replyMsg,
+        env: this.getExecutionEnv(contractAddress),
         response,
         trace: subtrace,
         debugMsgs,
+        storeSnapshot: this.chain.store,
       });
       return result;
     }
