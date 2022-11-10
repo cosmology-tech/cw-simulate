@@ -1,18 +1,20 @@
 import { Sha256 } from '@cosmjs/crypto';
 import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
-import { CWSimulateApp } from 'CWSimulateApp';
 import {
   BasicBackendApi,
   BasicKVIterStorage,
   IBackend,
 } from '@terran-one/cosmwasm-vm-js';
+import { CWSimulateApp } from '../CWSimulateApp';
 import { CWSimulateVMInstance } from '../instrumentation/CWSimulateVMInstance';
 
 import {
   AppResponse,
+  Binary,
   CodeInfo,
   Coin,
   ContractInfo,
+  ContractInfoResponse,
   ContractResponse,
   Event,
   ExecuteEnv,
@@ -24,6 +26,7 @@ import {
 } from '../types';
 import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
+import { fromBinary, fromRustResult, toBinary } from '../util';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -34,7 +37,7 @@ function numberToBigEndianUint64(n: number): Uint8Array {
 }
 
 export interface Execute {
-  contract_addr: String;
+  contract_addr: string;
   msg: string;
   funds: { denom: string; amount: string }[];
 }
@@ -47,13 +50,35 @@ export interface Instantiate {
   label: string;
 }
 
+export interface SmartQuery {
+  contract_addr: string;
+  msg: string; // Binary
+}
+
+export interface RawQuery {
+  contract_addr: string;
+  key: string; // Binary
+}
+
+export interface ContractInfoQuery {
+  contract_addr: string;
+}
+
 export type WasmMsg =
-  | { wasm: { execute: Execute } }
-  | { wasm: { instantiate: Instantiate } };
+  | { execute: Execute }
+  | { instantiate: Instantiate };
+
+export type WasmQuery =
+  | { smart: SmartQuery }
+  | { raw: RawQuery }
+  | { contract_info: ContractInfoQuery };
 
 export class WasmModule {
   public lastCodeId: number;
   public lastInstanceId: number;
+  
+  // TODO: benchmark w/ many coexisting VMs
+  private vms: Record<string, CWSimulateVMInstance> = {};
 
   constructor(public chain: CWSimulateApp) {
     chain.store.set('wasm', { codes: {}, contracts: {}, contractStorage: {} });
@@ -91,12 +116,13 @@ export class WasmModule {
     );
   }
 
-  getContractStorage(contractAddress: string): Map<string, string> {
-    return this.chain.store.getIn([
+  getContractStorage(contractAddress: string) {
+    const existing = this.chain.store.getIn([
       'wasm',
       'contractStorage',
       contractAddress,
-    ]) as Map<string, string>;
+    ]) as Map<string, string> | undefined;
+    return existing ?? Map();
   }
 
   setCodeInfo(codeId: number, codeInfo: CodeInfo) {
@@ -117,12 +143,12 @@ export class WasmModule {
     );
   }
 
-  getContractInfo(contractAddress: string): ContractInfo | undefined {
+  getContractInfo(contractAddress: string) {
     return this.chain.store.getIn([
       'wasm',
       'contracts',
       contractAddress,
-    ]) as ContractInfo;
+    ]) as ContractInfo | undefined;
   }
 
   deleteContractInfo(contractAddress: string) {
@@ -158,32 +184,33 @@ export class WasmModule {
   }
 
   async buildVM(contractAddress: string): Promise<CWSimulateVMInstance> {
-    const contractInfo = this.getContractInfo(contractAddress);
-    if (!contractInfo) {
-      throw new Error(`contract ${contractAddress} not found`);
+    if (!(contractAddress in this.vms)) {
+      const contractInfo = this.getContractInfo(contractAddress);
+      if (!contractInfo)
+        throw new Error(`contract ${contractAddress} not found`);
+
+      const { codeId } = contractInfo;
+      const codeInfo = this.getCodeInfo(codeId);
+      if (!codeInfo)
+        throw new Error(`code ${codeId} not found`);
+
+      const { wasmCode } = codeInfo;
+      const contractState = this.getContractStorage(contractAddress);
+
+      let storage = new BasicKVIterStorage();
+      storage.dict = contractState;
+
+      let backend: IBackend = {
+        backend_api: new BasicBackendApi(this.chain.bech32Prefix),
+        storage,
+        querier: this.chain.querier,
+      };
+
+      let vm = new CWSimulateVMInstance(backend);
+      await vm.build(wasmCode);
+      this.vms[contractAddress] = vm;
     }
-
-    const { codeId } = contractInfo;
-    const codeInfo = this.getCodeInfo(codeId);
-    if (!codeInfo) {
-      throw new Error(`code ${codeId} not found`);
-    }
-
-    const { wasmCode } = codeInfo;
-    const contractState = this.getContractStorage(contractAddress);
-
-    let storage = new BasicKVIterStorage();
-    storage.dict = contractState;
-
-    let backend: IBackend = {
-      backend_api: new BasicBackendApi(this.chain.bech32Prefix),
-      storage,
-      querier: this.chain.querier,
-    };
-
-    let vm = new CWSimulateVMInstance(backend);
-    await vm.build(wasmCode);
-    return vm;
+    return this.vms[contractAddress];
   }
 
   // TODO: add admin, label, etc.
@@ -325,15 +352,17 @@ export class WasmModule {
     }
   }
 
-  async callExecute(
+  callExecute(
     sender: string,
     funds: Coin[],
     contractAddress: string,
     executeMsg: any,
     debugMsgs: string[] = [],
     callHistory: any[] = []
-  ): Promise<RustResult<ContractResponse>> {
-    let vm = await this.buildVM(contractAddress);
+  ): RustResult<ContractResponse> {
+    let vm = this.vms[contractAddress];
+    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
+    vm.resetDebugInfo();
 
     let env = this.getExecutionEnv(contractAddress);
     let info = { sender, funds };
@@ -363,7 +392,7 @@ export class WasmModule {
     let debugMsgs: string[] = [];
     let callHistory: any[] = [];
 
-    let response = await this.callExecute(
+    let response = this.callExecute(
       sender,
       funds,
       contractAddress,
@@ -371,6 +400,7 @@ export class WasmModule {
       debugMsgs,
       callHistory
     );
+    
     if ('error' in response) {
       this.chain.store = snapshot; // revert
       trace.push({
@@ -388,7 +418,8 @@ export class WasmModule {
         storeSnapshot: snapshot,
       });
       return Err(response.error);
-    } else {
+    }
+    else {
       let customEvent = {
         type: 'execute',
         attributes: [
@@ -515,13 +546,15 @@ export class WasmModule {
     }
   }
 
-  async callReply(
+  callReply(
     contractAddress: string,
     replyMsg: ReplyMsg,
     debugMsgs: string[] = [],
     callHistory: any[] = []
-  ): Promise<RustResult<ContractResponse>> {
-    let vm = await this.buildVM(contractAddress);
+  ): RustResult<ContractResponse> {
+    let vm = this.vms[contractAddress];
+    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
+    
     let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
       .json as RustResult<ContractResponse>;
 
@@ -543,7 +576,7 @@ export class WasmModule {
   ): Promise<Result<AppResponse, string>> {
     let debugMsgs: string[] = [];
     let callHistory: any[] = [];
-    let response = await this.callReply(
+    let response = this.callReply(
       contractAddress,
       replyMsg,
       debugMsgs,
@@ -603,19 +636,16 @@ export class WasmModule {
     }
   }
 
-  async query(
+  query(
     contractAddress: string,
     queryMsg: any
-  ): Promise<Result<any, string>> {
-    let vm = await this.buildVM(contractAddress);
+  ): Result<any, string> {
+    let vm = this.vms[contractAddress];
+    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
+    
     let env = this.getExecutionEnv(contractAddress);
-    let res = vm.query(env, queryMsg).json as RustResult<string>;
-
-    if ('ok' in res) {
-      return Ok(JSON.parse(fromUtf8(fromBase64(res.ok))));
-    } else {
-      return Err(res.error);
-    }
+    return fromRustResult(vm.query(env, queryMsg).json as RustResult<string>)
+      .andThen(v => Ok(fromBinary(v)));
   }
 
   buildAppResponse(
@@ -660,10 +690,10 @@ export class WasmModule {
 
   async handleMsg(
     sender: string,
-    msg: any,
+    msg: WasmMsg,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let { wasm } = msg;
+    let wasm = msg;
     if ('execute' in wasm) {
       let { contract_addr, funds, msg } = wasm.execute;
       let msgJSON = fromUtf8(fromBase64(msg));
@@ -675,9 +705,60 @@ export class WasmModule {
         trace
       );
     } else if ('instantiate' in wasm) {
+      // NOTICE: instantiation will be async due to WebAssembly.instantiate
+      // This is fine b/c handleMsg (including submessages) is handled outside the VM cycle
       throw new Error('unimplemented');
     } else {
       throw new Error('Unknown wasm message');
+    }
+  }
+
+  handleQuery(query: WasmQuery): Result<Binary, string> {
+    if ('smart' in query) {
+      const { contract_addr, msg } = query.smart;
+      return Ok(
+        toBinary(this.query(contract_addr, fromBinary(msg)))
+      );
+    }
+    else if ('raw' in query) {
+      const { contract_addr, key } = query.raw;
+      
+      const storage = this.getContractStorage(contract_addr);
+      if (!storage) {
+        return Err(`Contract ${contract_addr} not found`);
+      }
+      
+      const value = storage.get(key);
+      if (value === undefined) {
+        return Err(`Key ${key} not found`);
+      }
+      else {
+        return Ok(value);
+      }
+    }
+    else if ('contract_info' in query) {
+      const { contract_addr } = query.contract_info;
+      const info = this.getContractInfo(contract_addr);
+      if (info === undefined) {
+        return Err(`Contract ${contract_addr} not found`);
+      }
+      else {
+        const { codeId: code_id, creator, admin } = info;
+        const resp: ContractInfoResponse = {
+          code_id,
+          creator,
+          admin,
+          ibc_port: null,
+          // TODO: VM lifetime mgmt
+          // currently all VMs are always loaded ie pinned
+          pinned: true,
+        };
+        
+        return Ok(toBinary(resp));
+      }
+    }
+    else {
+      return Err('Unknown wasm query');
     }
   }
 }

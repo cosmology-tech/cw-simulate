@@ -1,7 +1,9 @@
 import { readFileSync } from 'fs';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { AppResponse, Event, ReplyOn } from '../types';
-import { toBase64 } from '@cosmjs/encoding';
+import { fromBase64, toAscii, toBase64, toUtf8 } from '@cosmjs/encoding';
+import { fromBinary, toBinary } from '../util';
+import { Result } from 'ts-results';
 
 const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
 
@@ -451,8 +453,6 @@ describe('TraceLog', () => {
       sub(1, run(sub(1, debug('S2'), ReplyOn.Success)), ReplyOn.Success)
     );
 
-    console.log(JSON.stringify(executeMsg, null, 2));
-
     let trace: any[] = [];
     let res = await app.wasm.executeContract(
       info.sender,
@@ -494,5 +494,82 @@ describe('TraceLog', () => {
         ],
       },
     ]);
+  });
+});
+
+describe('Query', () => {
+  let contractAddress: string;
+  
+  beforeEach(async () => {
+    let res = await app.wasm.instantiateContract(
+      info.sender,
+      info.funds,
+      codeId,
+      {}
+    );
+    if (res.err) {
+      throw new Error(res.val);
+    }
+    contractAddress = getContractAddress(res.val);
+  });
+  
+  it('smart', async () => {
+    let executeMsg = push('foobar');
+    
+    await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      contractAddress,
+      executeMsg,
+    );
+    
+    let res = await app.wasm.handleQuery({
+      smart: {
+        contract_addr: contractAddress,
+        msg: toBinary({ get_buffer: {} }),
+      },
+    });
+    expect(res.ok).toBeTruthy();
+    
+    let parsedRes = fromBinary(res.val) as Result<any, string>;
+    expect(parsedRes.ok).toBeTruthy();
+    expect(parsedRes.val).toEqual({
+      buffer: ['foobar'],
+    });
+  });
+  
+  it('raw', async () => {
+    for (let i = 0; i < 3; ++i) {
+      await app.wasm.executeContract(
+        info.sender,
+        info.funds,
+        contractAddress,
+        push(`foobar${i}`),
+      );
+    }
+    
+    let res = await app.wasm.handleQuery({
+      raw: {
+        contract_addr: contractAddress,
+        key: toBase64(toAscii('buffer')),
+      },
+    });
+    expect(res.ok).toBeTruthy();
+    expect(fromBinary(res.val)).toEqual(['foobar0', 'foobar1', 'foobar2']);
+  });
+  
+  it('contract info', async () => {
+    let res = await app.wasm.handleQuery({
+      contract_info: {
+        contract_addr: contractAddress,
+      },
+    });
+    
+    expect(res.ok).toBeTruthy();
+    expect(fromBinary(res.val)).toMatchObject({
+      code_id: codeId,
+      creator: info.sender,
+      admin: null,
+    });
   });
 });

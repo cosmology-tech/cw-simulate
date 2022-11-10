@@ -169,4 +169,14 @@ export class CWSimulateVMInstance extends VMInstance {
     });
     return result;
   }
+  
+  /** Reset debug information such as debug messages & call history.
+   * 
+   * These should be valid only for individual contract executions.
+   */
+  resetDebugInfo() {
+    this.debugMsgs = [];
+    this.callHistory = [];
+    return this;
+  }
 }

@@ -45,6 +45,14 @@ export interface ContractInfo {
   created: number; // chain height
 }
 
+export interface ContractInfoResponse {
+  code_id: number;
+  creator: string;
+  admin: string | null;
+  pinned: boolean;
+  ibc_port: string | null;
+}
+
 export type CallHistoryLog = any;
 
 export interface ExecuteTraceLog {

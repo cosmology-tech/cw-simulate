@@ -62,8 +62,7 @@ export class Querier extends QuerierBase {
     if ('bank' in query) {
       return this.app.bank.handleQuery(query.bank);
     } else if ('wasm' in query) {
-      throw new Error('not yet implemented');
-      // return this.app.wasm.handleQuery(query.wasm);
+      return this.app.wasm.handleQuery(query.wasm);
     } else {
       return Err('Unknown query message');
     }
