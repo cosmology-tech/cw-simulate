@@ -1,9 +1,9 @@
 import { QuerierBase } from '@terran-one/cosmwasm-vm-js';
 import { Map } from 'immutable';
 import { Err, Result } from 'ts-results';
-import { WasmModule } from './modules/wasm';
+import { WasmModule, WasmQuery } from './modules/wasm';
 import { BankModule, BankQuery } from './modules/bank';
-import { AppResponse } from './types';
+import { AppResponse, Binary } from './types';
 
 export interface CWSimulateAppOptions {
   chainId: string;
@@ -40,7 +40,7 @@ export class CWSimulateApp {
     trace: any = []
   ): Promise<Result<AppResponse, string>> {
     if ('wasm' in msg) {
-      return await this.wasm.handleMsg(sender, msg, trace);
+      return await this.wasm.handleMsg(sender, msg.wasm, trace);
     } else if ('bank' in msg) {
       return await this.bank.handleMsg(sender, msg.bank);
     } else {
@@ -49,18 +49,21 @@ export class CWSimulateApp {
   }
 }
 
-type QueryMessage = {
-  bank: BankQuery;
-};
+export type QueryMessage =
+  | { bank: BankQuery }
+  | { wasm: WasmQuery };
 
 export class Querier extends QuerierBase {
   constructor(public readonly app: CWSimulateApp) {
     super();
   }
 
-  handleQuery(query: QueryMessage) {
+  handleQuery(query: QueryMessage): Result<Binary, string> {
     if ('bank' in query) {
       return this.app.bank.handleQuery(query.bank);
+    } else if ('wasm' in query) {
+      throw new Error('not yet implemented');
+      // return this.app.wasm.handleQuery(query.wasm);
     } else {
       return Err('Unknown query message');
     }

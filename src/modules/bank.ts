@@ -2,7 +2,9 @@ import { Coin } from '@cosmjs/amino';
 import { toAscii } from '@cosmjs/encoding';
 import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
+import { Binary } from '../types';
 import { CWSimulateApp } from '../CWSimulateApp';
+import { toBinary } from '../util';
 
 export interface AppResponse {
   events: any[];
@@ -159,22 +161,22 @@ export class BankModule {
     }
   }
 
-  public handleQuery(query: BankQuery) {
+  public handleQuery(query: BankQuery): Result<Binary, string> {
     let bankQuery = query;
     if ('balance' in bankQuery) {
       let { address, denom } = bankQuery.balance;
       const hasCoin = this
         .getBalance(address)
         .find(c => c.denom === denom);
-      return Ok<BalanceResponse>({
+      return Ok(toBinary({
         amount: hasCoin?.toCoin() ?? { denom, amount: '0' },
-      });
+      }));
     }
     else if ('all_balances' in bankQuery) {
       let { address } = bankQuery.all_balances;
-      return Ok<AllBalancesResponse>({
+      return Ok(toBinary({
         amount: this.getBalance(address).map(c => c.toCoin()),
-      });
+      }));
     }
     return Err('Unknown bank query');
   }

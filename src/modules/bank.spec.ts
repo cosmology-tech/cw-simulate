@@ -1,6 +1,7 @@
 import { Map } from 'immutable';
 import { cmd, run, TestContract } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
+import { fromBinary } from '../util';
 import { BankMessage, BankQuery, ParsedCoin } from './bank';
 
 type WrappedBankMessage = {
@@ -166,15 +167,17 @@ describe('BankModule', () => {
       { denom: 'bar', amount: '200' },
     ]);
     
-    let response = chain.querier.handleQuery({ bank: queryBalance });
-    expect(response.ok).toBeTruthy();
-    expect(response.unwrap().amount).toEqual({ denom: 'foo', amount: '100' });
+    let res = chain.querier.handleQuery({ bank: queryBalance });
+    expect(res.ok).toBeTruthy();
+    expect(fromBinary(res.val)).toEqual({ amount: { denom: 'foo', amount: '100' }});
     
-    response = chain.querier.handleQuery({ bank: queryAllBalances });
-    expect(response.ok).toBeTruthy();
-    expect(response.unwrap().amount).toEqual([
-      { denom: 'foo', amount: '200' },
-      { denom: 'bar', amount: '200' },
-    ]);
+    res = chain.querier.handleQuery({ bank: queryAllBalances });
+    expect(res.ok).toBeTruthy();
+    expect(fromBinary(res.val)).toEqual({
+      amount: [
+        { denom: 'foo', amount: '200' },
+        { denom: 'bar', amount: '200' },
+      ],
+    });
   });
 });
