@@ -696,19 +696,25 @@ export class WasmModule {
     let wasm = msg;
     if ('execute' in wasm) {
       let { contract_addr, funds, msg } = wasm.execute;
-      let msgJSON = fromUtf8(fromBase64(msg));
       return await this.executeContract(
         sender,
         funds,
         contract_addr,
-        JSON.parse(msgJSON),
+        fromBinary(msg),
         trace
       );
-    } else if ('instantiate' in wasm) {
-      // NOTICE: instantiation will be async due to WebAssembly.instantiate
-      // This is fine b/c handleMsg (including submessages) is handled outside the VM cycle
-      throw new Error('unimplemented');
-    } else {
+    }
+    else if ('instantiate' in wasm) {
+      let { code_id, funds, msg } = wasm.instantiate;
+      return await this.instantiateContract(
+        sender,
+        funds,
+        code_id,
+        fromBinary(msg),
+        trace,
+      );
+    }
+    else {
       throw new Error('Unknown wasm message');
     }
   }

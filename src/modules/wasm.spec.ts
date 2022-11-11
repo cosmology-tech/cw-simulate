@@ -2,7 +2,7 @@ import { toAscii, toBase64 } from '@cosmjs/encoding';
 import { Result } from 'ts-results';
 import { cmd, exec, TestContract, TestContractInstance } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
-import { Event, ReplyOn, TraceLog } from '../types';
+import { AppResponse, Event, ReplyOn, TraceLog } from '../types';
 import { fromBinary, toBinary } from '../util';
 
 function event(ty: string, attrs: [string, string][]): Event {
@@ -24,6 +24,34 @@ let info = {
 
 const testCode = new TestContract(app, info.sender);
 const codeId = testCode.register();
+
+describe('Instantiate', () => {
+  it('EOA instantiates contract', async () => {
+    const result = await app.wasm.handleMsg(
+      info.sender,
+      {
+        instantiate: {
+          code_id: codeId,
+          msg: toBinary({}),
+          funds: info.funds,
+          admin: null,
+          label: 'eoa-instantiated',
+        }
+      },
+    );
+    
+    expect(result.ok).toBeTruthy();
+    
+    const resp = result.val as AppResponse;
+    const evt = resp.events[0];
+    expect(evt.type).toStrictEqual('instantiate');
+    
+    const addr = evt.attributes.find(attr => attr.key === '_contract_address')?.value;
+    expect(addr).toBeTruthy();
+  });
+  
+  it.todo('contract instantiates contract');
+});
 
 describe('Events', function () {
   let testContract: TestContractInstance;
@@ -310,16 +338,13 @@ describe('Data', () => {
     });
   });
 
-  it('last msg data is returned', async () => {
-    // TODO: implement; this requires changing cw-simulate-tests in Rust :P
-    // it may be tricky because outermost data is returned, so we may need to make
-    // new ExecuteMsg types that don't overwrite at the root level instead of
-    // a command-processor
-  });
+  // TODO: implement; this requires changing cw-simulate-tests in Rust :P
+  // it may be tricky because outermost data is returned, so we may need to make
+  // new ExecuteMsg types that don't overwrite at the root level instead of
+  // a command-processor
+  it.todo('last msg data is returned');
 
-  it('if reply has no data, last data is used', async () => {
-    // TODO: implement
-  });
+  it.todo('if reply has no data, last data is used');
 });
 
 describe('TraceLog', () => {
