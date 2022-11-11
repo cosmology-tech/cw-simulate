@@ -1,4 +1,5 @@
 import Immutable from 'immutable';
+import { Result } from 'ts-results';
 
 export interface ContractResponse {
   messages: SubMsg[];
@@ -53,35 +54,93 @@ export interface ContractInfoResponse {
   ibc_port: string | null;
 }
 
-export type CallHistoryLog = any;
+export type DebugLog = PrintDebugLog | CallDebugLog;
 
-export interface ExecuteTraceLog {
-  type: 'execute' | 'instantiate';
+export interface PrintDebugLog {
+  type: 'print';
+  message: string;
+}
+
+type Bytes = string;
+
+type NamedArg<T extends any = any> = { [name: string]: T };
+
+type APIFn<
+  CallArgs extends NamedArg,
+  ReturnType = undefined
+> = ReturnType extends undefined
+  ? {
+      args: CallArgs;
+    }
+  : {
+      args: CallArgs;
+      result: ReturnType;
+    };
+
+interface CosmWasmAPI {
+  db_read: APIFn<{ key: Bytes }, Bytes>;
+  db_write: APIFn<{ key: Bytes; value: Bytes }>;
+  db_remove: APIFn<{ key: Bytes }>;
+  db_scan: APIFn<{ start: Bytes; end: Bytes; order: number }, Bytes>;
+  db_next: APIFn<{ iterator_id: Bytes }, Bytes>;
+  addr_humanize: APIFn<{ source: Bytes }, Bytes>;
+  addr_canonicalize: APIFn<{ source: Bytes; destination: Bytes }, Bytes>;
+  addr_validate: APIFn<{ source: Bytes }, Bytes>;
+  secp256k1_verify: APIFn<
+    { hash: Bytes; signature: Bytes; pubkey: Bytes },
+    number
+  >;
+  secp256k1_recover_pubkey: APIFn<
+    { msgHash: Bytes; signature: Bytes; recover_param: number },
+    Bytes
+  >;
+  abort: APIFn<{ message: string }>;
+  debug: APIFn<{ message: string }>;
+  ed25519_verify: APIFn<
+    { message: Bytes; signature: Bytes; pubkey: Bytes },
+    number
+  >;
+  ed25519_batch_verify: APIFn<
+    { messages_ptr: Bytes; signatures_ptr: Bytes; pubkeys_ptr: Bytes },
+    number
+  >;
+  query_chain: APIFn<{ request: Bytes }, Bytes>;
+}
+
+type Unionize<T> = T extends { [key in keyof T]: infer ValueType }
+  ? ValueType
+  : never;
+
+type CallDebugLog<T extends keyof CosmWasmAPI = keyof CosmWasmAPI> = {
+  type: 'call';
+} & Unionize<{
+  [K in T]: { fn: K } & CosmWasmAPI[K];
+}>;
+
+interface TraceLogCommon {
+  type: string;
   contractAddress: string;
+  env: ExecuteEnv;
+  msg: any;
+  response: RustResult<ContractResponse>;
+  logs: DebugLog[];
+  trace?: TraceLog[];
+  storeSnapshot: Immutable.Map<string, any>;
+  result: Result<AppResponse, string>;
+}
+
+export type ExecuteTraceLog = TraceLogCommon & {
+  type: 'execute' | 'instantiate';
   info: {
     sender: string;
     funds: Coin[];
   };
-  env: ExecuteEnv;
-  msg: any;
-  response: RustResult<ContractResponse>;
-  debugMsgs: string[];
-  callHistory: CallHistoryLog[];
-  trace?: TraceLog[];
-  storeSnapshot: Immutable.Map<string, any>;
-}
+};
 
-export interface ReplyTraceLog {
+export type ReplyTraceLog = TraceLogCommon & {
   type: 'reply';
-  contractAddress: string;
-  env: ExecuteEnv;
   msg: ReplyMsg;
-  response: RustResult<ContractResponse>;
-  debugMsgs: string[];
-  callHistory: CallHistoryLog[];
-  trace?: TraceLog[];
-  storeSnapshot: Immutable.Map<string, any>;
-}
+};
 
 export type TraceLog = ExecuteTraceLog | ReplyTraceLog;
 

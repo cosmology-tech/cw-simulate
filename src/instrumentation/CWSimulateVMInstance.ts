@@ -1,86 +1,106 @@
 import { VMInstance, Region, IBackend } from '@terran-one/cosmwasm-vm-js';
+import { DebugLog } from '../types';
 
 export class CWSimulateVMInstance extends VMInstance {
-  public callHistory: any[] = [];
-
-  constructor(backend: IBackend) {
+  constructor(public logs: Array<DebugLog>, backend: IBackend) {
     super(backend);
   }
 
   do_db_read(key: Region): Region {
     let result = super.do_db_read(key);
-    this.callHistory.push({
-      call: { type: 'db_read', key: key.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'db_read',
+      args: {
+        key: key.str,
+      },
+      result: result.str,
     });
     return result;
   }
 
   do_db_write(key: Region, value: Region) {
     super.do_db_write(key, value);
-    this.callHistory.push({
-      call: { type: 'db_write', key: key.read(), value: value.read() },
+    this.logs.push({
+      type: 'call',
+      fn: 'db_write',
+      args: { key: key.str, value: value.str },
     });
   }
 
   do_db_remove(key: Region) {
     super.do_db_remove(key);
-    this.callHistory.push({ call: { type: 'db_remove', key: key.read() } });
+    this.logs.push({
+      type: 'call',
+      fn: 'db_remove',
+      args: { key: key.str },
+    });
   }
 
   do_db_scan(start: Region, end: Region, order: number): Region {
     let result = super.do_db_scan(start, end, order);
-    this.callHistory.push({
-      call: { type: 'db_scan', start: start.read(), end: end.read(), order },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'db_scan',
+      args: { start: start.str, end: end.str, order },
+      result: result.str,
     });
     return result;
   }
 
   do_db_next(iterator_id: Region): Region {
     let result = super.do_db_next(iterator_id);
-    this.callHistory.push({
-      call: { type: 'db_next', iterator_id: iterator_id.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'db_next',
+      args: { iterator_id: iterator_id.str },
+      result: result.str,
     });
     return result;
   }
 
   do_addr_humanize(source: Region, destination: Region): Region {
     let result = super.do_addr_humanize(source, destination);
-    this.callHistory.push({
-      call: { type: 'addr_humanize', source: source.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'addr_humanize',
+      args: { source: source.str },
+      result: result.str,
     });
     return result;
   }
 
   do_addr_canonicalize(source: Region, destination: Region): Region {
     let result = super.do_addr_canonicalize(source, destination);
-    this.callHistory.push({
-      call: { type: 'addr_canonicalize', source: source.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'addr_canonicalize',
+      args: { source: source.str, destination: destination.str },
+      result: result.str,
     });
     return result;
   }
 
   do_addr_validate(source: Region): Region {
     let result = super.do_addr_validate(source);
-    this.callHistory.push({
-      call: { type: 'addr_validate', source: source.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'addr_validate',
+      args: { source: source.str },
+      result: result.str,
     });
     return result;
   }
 
   do_secp256k1_verify(hash: Region, signature: Region, pubkey: Region): number {
     let result = super.do_secp256k1_verify(hash, signature, pubkey);
-    this.callHistory.push({
-      call: {
-        type: 'secp256k1_verify',
-        hash: hash.read(),
-        signature: signature.read(),
-        pubkey: pubkey.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'secp256k1_verify',
+      args: {
+        hash: hash.str,
+        signature: signature.str,
+        pubkey: pubkey.str,
       },
       result,
     });
@@ -97,29 +117,38 @@ export class CWSimulateVMInstance extends VMInstance {
       signature,
       recover_param
     );
-    this.callHistory.push({
-      call: {
-        type: 'secp256k1_recover_pubkey',
-        msgHash: msgHash.read(),
-        signature: signature.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'secp256k1_recover_pubkey',
+      args: {
+        msgHash: msgHash.str,
+        signature: signature.str,
         recover_param,
       },
-      result: result.read(),
+      result: result.str,
     });
     return result;
   }
 
   do_abort(message: Region) {
     super.do_abort(message);
-    this.callHistory.push({
-      call: { type: 'abort', message: message.read() },
+    this.logs.push({
+      type: 'call',
+      fn: 'abort',
+      args: { message: message.read_str() },
     });
   }
 
   do_debug(message: Region) {
+    this.logs.push({
+      type: 'call',
+      fn: 'debug',
+      args: { message: message.read_str() },
+    });
     super.do_debug(message);
-    this.callHistory.push({
-      call: { type: 'debug', message: message.read() },
+    this.logs.push({
+      type: 'print',
+      message: message.str,
     });
   }
 
@@ -133,13 +162,15 @@ export class CWSimulateVMInstance extends VMInstance {
       signatures_ptr,
       public_keys_ptr
     );
-    this.callHistory.push({
-      call: {
-        type: 'ed25519_batch_verify',
-        messages_ptr: messages_ptr.read(),
-        signatures_ptr: signatures_ptr.read(),
-        public_keys_ptr: public_keys_ptr.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'ed25519_batch_verify',
+      args: {
+        messages_ptr: messages_ptr.str,
+        signatures_ptr: signatures_ptr.str,
+        pubkeys_ptr: public_keys_ptr.str,
       },
+      result,
     });
     return result;
   }
@@ -150,11 +181,13 @@ export class CWSimulateVMInstance extends VMInstance {
     pubkey: Region
   ): number {
     let result = super.do_ed25519_verify(message, signature, pubkey);
-    this.callHistory.push({
-      call: {
-        type: 'ed25519_verify',
-        message: message.read(),
-        signature: signature.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'ed25519_verify',
+      args: {
+        message: message.str,
+        signature: signature.str,
+        pubkey: pubkey.str,
       },
       result,
     });
@@ -163,9 +196,11 @@ export class CWSimulateVMInstance extends VMInstance {
 
   do_query_chain(request: Region): Region {
     let result = super.do_query_chain(request);
-    this.callHistory.push({
-      call: { type: 'query_chain', request: request.read() },
-      result: result.read(),
+    this.logs.push({
+      type: 'call',
+      fn: 'query_chain',
+      args: { request: request.str },
+      result: result.str,
     });
     return result;
   }
@@ -176,7 +211,7 @@ export class CWSimulateVMInstance extends VMInstance {
    */
   resetDebugInfo() {
     this.debugMsgs = [];
-    this.callHistory = [];
+    this.logs = [];
     return this;
   }
 }
