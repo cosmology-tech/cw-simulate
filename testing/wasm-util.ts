@@ -1,6 +1,6 @@
 import { Coin } from '@cosmjs/amino';
 import { readFileSync } from 'fs';
-import { Event, ReplyOn } from '../src/types';
+import { Event, ReplyOn, TraceLog } from '../src/types';
 import { CWSimulateApp } from '../src/CWSimulateApp';
 import { BankMessage } from '../src/modules/bank';
 
@@ -44,12 +44,18 @@ type Command =
   | DataCommand
   | ThrowCommand;
 
-export function run(...program: Command[]) {
-  return {
-    run: {
-      program,
-    },
-  };
+export const exec = {
+  run(...program: Command[]) {
+    return {
+      run: {
+        program,
+      },
+    };
+  },
+  debug: (msg: string)  => ({ debug: { msg }}),
+  push: (data: string) => ({ push: { data }}),
+  pop: () => ({ pop: {} }),
+  reset: () => ({ reset: {} }),
 }
 
 export const cmd = {
@@ -153,7 +159,7 @@ export class TestContractInstance {
     sender: string,
     msg: any,
     funds: Coin[] = [],
-    trace: any[] = []
+    trace: TraceLog[] = []
   ) {
     return await this.app.wasm.executeContract(
       sender,

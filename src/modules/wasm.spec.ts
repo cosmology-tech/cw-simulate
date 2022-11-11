@@ -1,97 +1,9 @@
 import { toAscii, toBase64 } from '@cosmjs/encoding';
 import { Result } from 'ts-results';
-import { TestContract, TestContractInstance } from '../../testing/wasm-util';
+import { cmd, exec, TestContract, TestContractInstance } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { Event, ReplyOn, TraceLog } from '../types';
 import { fromBinary, toBinary } from '../util';
-
-interface MsgCommand {
-  msg: any;
-}
-
-interface SubCommand {
-  sub: [number, any, ReplyOn];
-}
-
-interface EvCommand {
-  ev: [string, [string, string][]];
-}
-
-interface AttrCommand {
-  attr: [string, string];
-}
-
-interface DataCommand {
-  data: number[];
-}
-
-interface ThrowCommand {
-  throw: string;
-}
-
-type Command =
-  | MsgCommand
-  | SubCommand
-  | EvCommand
-  | AttrCommand
-  | DataCommand
-  | ThrowCommand;
-
-function run(...program: Command[]) {
-  return {
-    run: {
-      program,
-    },
-  };
-}
-
-function msg(payload: any): MsgCommand {
-  return {
-    msg: payload,
-  };
-}
-
-function sub(id: number, msg: any, reply_on: ReplyOn): SubCommand {
-  return {
-    sub: [id, msg, reply_on],
-  };
-}
-
-function ev(ty: string, attrs: [string, string][]): EvCommand {
-  return {
-    ev: [ty, attrs],
-  };
-}
-
-function attr(k: string, v: string): AttrCommand {
-  return {
-    attr: [k, v],
-  };
-}
-
-function data(v: number[]): DataCommand {
-  return {
-    data: v,
-  };
-}
-
-function push(data: string) {
-  return {
-    push: { data },
-  };
-}
-
-function debug(msg: string) {
-  return {
-    debug: { msg },
-  };
-}
-
-function err(msg: string): ThrowCommand {
-  return {
-    throw: msg,
-  };
-}
 
 function event(ty: string, attrs: [string, string][]): Event {
   return {
@@ -121,17 +33,17 @@ describe('Events', function () {
   });
 
   it('attributes get added to `wasm` event and events are prefixed with `wasm-`', async () => {
-    let executeMsg = run(
-      ev('EV1', [
+    let executeMsg = exec.run(
+      cmd.ev('EV1', [
         ['EV1-K1', 'EV1-V1'],
         ['EV1-K2', 'EV1-V2'],
       ]),
-      ev('EV2', [
+      cmd.ev('EV2', [
         ['EV2-K1', 'EV2-V1'],
         ['EV2-K2', 'EV2-V2'],
       ]),
-      attr('A1-K', 'A1-V'),
-      attr('A2-K', 'A2-V')
+      cmd.attr('A1-K', 'A1-V'),
+      cmd.attr('A2-K', 'A2-V')
     );
 
     let res = await testContract.execute(
@@ -164,9 +76,9 @@ describe('Events', function () {
   });
 
   it('submessages and replies', async () => {
-    let executeMsg = run(
-      sub(1, run(msg(push('N1'))), ReplyOn.Success),
-      sub(2, run(err('error-S2')), ReplyOn.Error)
+    let executeMsg = exec.run(
+      cmd.sub(1, exec.run(cmd.msg(exec.push('N1'))), ReplyOn.Success),
+      cmd.sub(2, exec.run(cmd.err('error-S2')), ReplyOn.Error)
     );
 
     let res = await testContract.execute(
@@ -206,11 +118,11 @@ describe('Events', function () {
   });
 
   it('nested submessages', async () => {
-    let executeMsg = run(
-      sub(1, run(msg(push('N1'))), ReplyOn.Success),
-      sub(
+    let executeMsg = exec.run(
+      cmd.sub(1, exec.run(cmd.msg(exec.push('N1'))), ReplyOn.Success),
+      cmd.sub(
         1,
-        run(sub(1, run(msg(push('N2'))), ReplyOn.Success)),
+        exec.run(cmd.sub(1, exec.run(cmd.msg(exec.push('N2'))), ReplyOn.Success)),
         ReplyOn.Success
       )
     );
@@ -275,7 +187,10 @@ describe('Rollback', function () {
   });
 
   it('control case', async () => {
-    let executeMsg = run(msg(push('A')), msg(push('B')));
+    let executeMsg = exec.run(
+      cmd.msg(exec.push('A')),
+      cmd.msg(exec.push('B')),
+    );
 
     await testContract.execute(
       info.sender,
@@ -290,7 +205,11 @@ describe('Rollback', function () {
   });
 
   it('rollbacks if message fails', async () => {
-    let executeMsg = run(msg(push('A')), msg(push('B')), err('error'));
+    let executeMsg = exec.run(
+      cmd.msg(exec.push('A')),
+      cmd.msg(exec.push('B')),
+      cmd.err('error'),
+    );
 
     await testContract.execute(
       info.sender,
@@ -305,10 +224,18 @@ describe('Rollback', function () {
   });
 
   it('partial rollback - submessages', async () => {
-    let executeMsg = run(
-      msg(push('A')),
-      sub(2, run(msg(push('B')), msg(push('C')), err('error')), ReplyOn.Error),
-      msg(push('D'))
+    let executeMsg = exec.run(
+      cmd.msg(exec.push('A')),
+      cmd.sub(
+        2,
+        exec.run(
+          cmd.msg(exec.push('B')),
+          cmd.msg(exec.push('C')),
+          cmd.err('error')
+        ),
+        ReplyOn.Error
+      ),
+      cmd.msg(exec.push('D')),
     );
 
     await testContract.execute(
@@ -324,22 +251,26 @@ describe('Rollback', function () {
   });
 
   it('partial rollback - nested submessages', async () => {
-    let executeMsg = run(
-      msg(push('A')),
-      sub(
+    let executeMsg = exec.run(
+      cmd.msg(exec.push('A')),
+      cmd.sub(
         1,
-        run(
-          msg(push('B')),
-          sub(
+        exec.run(
+          cmd.msg(exec.push('B')),
+          cmd.sub(
             2,
-            run(msg(push('C')), msg(push('D')), err('error')),
+            exec.run(
+              cmd.msg(exec.push('C')),
+              cmd.msg(exec.push('D')),
+              cmd.err('error'),
+            ),
             ReplyOn.Error
           ),
-          msg(push('E'))
+          cmd.msg(exec.push('E'))
         ),
         ReplyOn.Success
       ),
-      msg(push('F'))
+      cmd.msg(exec.push('F'))
     );
 
     await testContract.execute(
@@ -363,7 +294,10 @@ describe('Data', () => {
   });
 
   it('control case', async () => {
-    let executeMsg = run(msg(push('S1')), data([1]));
+    let executeMsg = exec.run(
+      cmd.msg(exec.push('S1')),
+      cmd.data([1]),
+    );
 
     let res = await testContract.execute(
       info.sender,
@@ -396,10 +330,10 @@ describe('TraceLog', () => {
   });
 
   it('works', async () => {
-    let executeMsg = run(
-      sub(1, debug('S1'), ReplyOn.Success),
-      msg(push('M1')),
-      sub(1, run(sub(1, debug('S2'), ReplyOn.Success)), ReplyOn.Success)
+    let executeMsg = exec.run(
+      cmd.sub(1, exec.debug('S1'), ReplyOn.Success),
+      cmd.msg(exec.push('M1')),
+      cmd.sub(1, exec.run(cmd.sub(1, exec.debug('S2'), ReplyOn.Success)), ReplyOn.Success)
     );
 
     let trace: TraceLog[] = [];
@@ -453,11 +387,9 @@ describe('Query', () => {
   });
   
   it('smart', async () => {
-    let executeMsg = push('foobar');
-    
     await testContract.execute(
       info.sender,
-      executeMsg,
+      exec.push('foobar'),
       info.funds,
     );
     
@@ -482,7 +414,7 @@ describe('Query', () => {
         info.sender,
         info.funds,
         testContract.address,
-        push(`foobar${i}`),
+        exec.push(`foobar${i}`),
       );
     }
     

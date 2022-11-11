@@ -1,5 +1,5 @@
 import { Map } from 'immutable';
-import { cmd, run, TestContract } from '../../testing/wasm-util';
+import { cmd, exec, TestContract } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { fromBinary } from '../util';
 import { BankMessage, BankQuery, ParsedCoin } from './bank';
@@ -112,7 +112,7 @@ describe('BankModule', () => {
     bank.setBalance(contract.address, [{denom: 'foo', amount: '1000'}]);
 
     // Act
-    const msg = run(
+    const msg = exec.run(
       cmd.bank({
         send: {
           to_address: 'alice',
