@@ -1,4 +1,5 @@
 import Immutable from 'immutable';
+import { Result } from 'ts-results';
 
 export interface ContractResponse {
   messages: SubMsg[];
@@ -52,7 +53,7 @@ export interface PrintDebugLog {
   message: string;
 }
 
-type Bytes = Uint8Array;
+type Bytes = string;
 
 type NamedArg<T extends any = any> = { [name: string]: T };
 
@@ -108,40 +109,30 @@ type CallDebugLog<T extends keyof CosmWasmAPI = keyof CosmWasmAPI> = {
   [K in T]: { fn: K } & CosmWasmAPI[K];
 }>;
 
-const i: CallDebugLog = {
-  type: 'call',
-  fn: 'db_write',
-  args: {
-    key: Uint8Array.from([1, 2, 3]),
-    value: Uint8Array.from([1, 2, 3]),
-  },
-};
-
-export interface ExecuteTraceLog {
-  type: 'execute' | 'instantiate';
+interface TraceLogCommon {
+  type: string;
   contractAddress: string;
-  info: {
-    sender: string;
-    funds: Coin[];
-  };
   env: ExecuteEnv;
   msg: any;
   response: RustResult<ContractResponse>;
   logs: DebugLog[];
   trace?: TraceLog[];
   storeSnapshot: Immutable.Map<string, any>;
+  result: Result<AppResponse, string>;
 }
 
-export interface ReplyTraceLog {
+export type ExecuteTraceLog = TraceLogCommon & {
+  type: 'execute' | 'instantiate';
+  info: {
+    sender: string;
+    funds: Coin[];
+  };
+};
+
+export type ReplyTraceLog = TraceLogCommon & {
   type: 'reply';
-  contractAddress: string;
-  env: ExecuteEnv;
   msg: ReplyMsg;
-  response: RustResult<ContractResponse>;
-  logs: DebugLog[];
-  trace?: TraceLog[];
-  storeSnapshot: Immutable.Map<string, any>;
-}
+};
 
 export type TraceLog = ExecuteTraceLog | ReplyTraceLog;
 

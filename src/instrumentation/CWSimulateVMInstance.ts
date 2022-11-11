@@ -12,9 +12,9 @@ export class CWSimulateVMInstance extends VMInstance {
       type: 'call',
       fn: 'db_read',
       args: {
-        key: key.read(),
+        key: key.str,
       },
-      result: result.read(),
+      result: result.str,
     });
     return result;
   }
@@ -24,7 +24,7 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'db_write',
-      args: { key: key.read(), value: value.read() },
+      args: { key: key.str, value: value.str },
     });
   }
 
@@ -33,7 +33,7 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'db_remove',
-      args: { key: key.read() },
+      args: { key: key.str },
     });
   }
 
@@ -42,8 +42,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'db_scan',
-      args: { start: start.read(), end: end.read(), order },
-      result: result.read(),
+      args: { start: start.str, end: end.str, order },
+      result: result.str,
     });
     return result;
   }
@@ -53,8 +53,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'db_next',
-      args: { iterator_id: iterator_id.read() },
-      result: result.read(),
+      args: { iterator_id: iterator_id.str },
+      result: result.str,
     });
     return result;
   }
@@ -64,8 +64,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'addr_humanize',
-      args: { source: source.read() },
-      result: result.read(),
+      args: { source: source.str },
+      result: result.str,
     });
     return result;
   }
@@ -75,8 +75,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'addr_canonicalize',
-      args: { source: source.read(), destination: destination.read() },
-      result: result.read(),
+      args: { source: source.str, destination: destination.str },
+      result: result.str,
     });
     return result;
   }
@@ -86,8 +86,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'addr_validate',
-      args: { source: source.read() },
-      result: result.read(),
+      args: { source: source.str },
+      result: result.str,
     });
     return result;
   }
@@ -98,9 +98,9 @@ export class CWSimulateVMInstance extends VMInstance {
       type: 'call',
       fn: 'secp256k1_verify',
       args: {
-        hash: hash.read(),
-        signature: signature.read(),
-        pubkey: pubkey.read(),
+        hash: hash.str,
+        signature: signature.str,
+        pubkey: pubkey.str,
       },
       result,
     });
@@ -121,11 +121,11 @@ export class CWSimulateVMInstance extends VMInstance {
       type: 'call',
       fn: 'secp256k1_recover_pubkey',
       args: {
-        msgHash: msgHash.read(),
-        signature: signature.read(),
+        msgHash: msgHash.str,
+        signature: signature.str,
         recover_param,
       },
-      result: result.read(),
+      result: result.str,
     });
     return result;
   }
@@ -166,9 +166,9 @@ export class CWSimulateVMInstance extends VMInstance {
       type: 'call',
       fn: 'ed25519_batch_verify',
       args: {
-        messages_ptr: messages_ptr.read(),
-        signatures_ptr: signatures_ptr.read(),
-        pubkeys_ptr: public_keys_ptr.read(),
+        messages_ptr: messages_ptr.str,
+        signatures_ptr: signatures_ptr.str,
+        pubkeys_ptr: public_keys_ptr.str,
       },
       result,
     });
@@ -185,9 +185,9 @@ export class CWSimulateVMInstance extends VMInstance {
       type: 'call',
       fn: 'ed25519_verify',
       args: {
-        message: message.read(),
-        signature: signature.read(),
-        pubkey: pubkey.read(),
+        message: message.str,
+        signature: signature.str,
+        pubkey: pubkey.str,
       },
       result,
     });
@@ -199,8 +199,8 @@ export class CWSimulateVMInstance extends VMInstance {
     this.logs.push({
       type: 'call',
       fn: 'query_chain',
-      args: { request: request.read() },
-      result: result.read(),
+      args: { request: request.str },
+      result: result.str,
     });
     return result;
   }

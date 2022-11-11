@@ -267,6 +267,7 @@ export class WasmModule {
       this.lastInstanceId -= 1;
       this.deleteContractInfo(contractAddress);
       this.chain.store = snapshot;
+      let result = Err(response.error);
       trace.push({
         type: 'instantiate' as 'instantiate',
         contractAddress,
@@ -279,8 +280,9 @@ export class WasmModule {
         env: this.getExecutionEnv(contractAddress),
         logs,
         storeSnapshot: snapshot,
+        result,
       });
-      return Err(response.error);
+      return result;
     } else {
       let customEvent: Event = {
         type: 'instantiate',
@@ -317,6 +319,7 @@ export class WasmModule {
         logs,
         trace: subtrace,
         storeSnapshot: this.chain.store,
+        result,
       });
 
       return result;
@@ -367,6 +370,7 @@ export class WasmModule {
     );
     if ('error' in response) {
       this.chain.store = snapshot; // revert
+      let result = Err(response.error);
       trace.push({
         type: 'execute' as 'execute',
         contractAddress,
@@ -379,8 +383,9 @@ export class WasmModule {
         },
         logs,
         storeSnapshot: snapshot,
+        result,
       });
-      return Err(response.error);
+      return result;
     } else {
       let customEvent = {
         type: 'execute',
@@ -416,6 +421,7 @@ export class WasmModule {
         trace: subtrace,
         logs,
         storeSnapshot: this.chain.store,
+        result,
       });
       return result;
     }
@@ -534,6 +540,7 @@ export class WasmModule {
     let logs: DebugLog[] = [];
     let response = await this.callReply(contractAddress, replyMsg, logs);
     if ('error' in response) {
+      let result = Err(response.error);
       trace.push({
         type: 'reply' as 'reply',
         contractAddress,
@@ -542,8 +549,9 @@ export class WasmModule {
         response,
         logs,
         storeSnapshot: this.chain.store,
+        result,
       });
-      return Err(response.error);
+      return result;
     } else {
       let customEvent = {
         type: 'reply',
@@ -580,6 +588,7 @@ export class WasmModule {
         trace: subtrace,
         logs,
         storeSnapshot: this.chain.store,
+        result,
       });
       return result;
     }
