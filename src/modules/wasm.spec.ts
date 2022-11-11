@@ -468,7 +468,7 @@ describe('TraceLog', () => {
         trace: [
           {
             type: 'execute', // S1
-            debugMsgs: ['S1'],
+            logs: [{}, { type: 'print', message: 'S1' }],
           },
           {
             type: 'reply', // reply(S1)
@@ -481,7 +481,7 @@ describe('TraceLog', () => {
             trace: [
               {
                 type: 'execute',
-                debugMsgs: ['S2'],
+                logs: [{}, { type: 'print', message: 'S2' }],
               },
               {
                 type: 'reply',
