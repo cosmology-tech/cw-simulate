@@ -1,3 +1,4 @@
+import { Coin } from '@cosmjs/amino';
 import { toAscii, toBase64 } from '@cosmjs/encoding';
 import { Result } from 'ts-results';
 import { cmd, exec, TestContract, TestContractInstance } from '../../testing/wasm-util';
@@ -19,7 +20,7 @@ const app = new CWSimulateApp({
 
 let info = {
   sender: 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu',
-  funds: [],
+  funds: [] as Coin[],
 };
 
 const testCode = new TestContract(app, info.sender);
@@ -50,7 +51,48 @@ describe('Instantiate', () => {
     expect(addr).toBeTruthy();
   });
   
-  it.todo('contract instantiates contract');
+  it('contract instantiates contract', async () => {
+    // Phase 1: Test instantiation of contract by contract
+    const testContract = await testCode.instantiate({ codeId, funds: info.funds });
+    
+    const trace: TraceLog[] = [];
+    let result = await testContract.execute(
+      info.sender,
+      exec.instantiate({
+        codeId,
+        msg: {},
+        funds: info.funds,
+        label: 'contract-instantiated',
+      }),
+      info.funds,
+      trace,
+    );
+    
+    expect(result.ok).toBeTruthy();
+    
+    const resp = result.val as AppResponse;
+    const evts = resp.events;
+    expect(evts[0].type).toStrictEqual('execute');
+    expect(evts[1].type).toStrictEqual('instantiate');
+    
+    const addr = evts[1].attributes.find(attr => attr.key === '_contract_address')?.value;
+    expect(addr).toBeTruthy();
+    
+    // Phase 2: Test contract-instantiated contract actually exists & works
+    result = await app.wasm.executeContract(
+      info.sender,
+      info.funds,
+      addr!,
+      exec.push('foobar'),
+    );
+    expect(result.ok).toBeTruthy();
+    
+    const queryResult = await app.wasm.query(addr!, { get_buffer: {} });
+    expect(queryResult.ok);
+    expect(queryResult.val).toMatchObject({
+      buffer: ['foobar'],
+    });
+  });
 });
 
 describe('Events', function () {
