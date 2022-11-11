@@ -1,11 +1,9 @@
-import { readFileSync } from 'fs';
-import { CWSimulateApp } from '../CWSimulateApp';
-import { AppResponse, Event, ReplyOn } from '../types';
-import { fromBase64, toAscii, toBase64, toUtf8 } from '@cosmjs/encoding';
-import { fromBinary, toBinary } from '../util';
+import { toAscii, toBase64 } from '@cosmjs/encoding';
 import { Result } from 'ts-results';
-
-const testBytecode = readFileSync('testing/cw_simulate_tests-aarch64.wasm');
+import { TestContract, TestContractInstance } from '../../testing/wasm-util';
+import { CWSimulateApp } from '../CWSimulateApp';
+import { Event, ReplyOn, TraceLog } from '../types';
+import { fromBinary, toBinary } from '../util';
 
 interface MsgCommand {
   msg: any;
@@ -102,10 +100,6 @@ function event(ty: string, attrs: [string, string][]): Event {
   };
 }
 
-function getContractAddress(res: AppResponse): string {
-  return res.events[0].attributes[0].value;
-}
-
 const app = new CWSimulateApp({
   chainId: 'phoenix-1',
   bech32Prefix: 'terra',
@@ -116,22 +110,14 @@ let info = {
   funds: [],
 };
 
-const codeId = app.wasm.create(info.sender, Uint8Array.from(testBytecode));
+const testCode = new TestContract(app, info.sender);
+const codeId = testCode.register();
 
 describe('Events', function () {
-  let contractAddress: string;
+  let testContract: TestContractInstance;
 
   beforeEach(async () => {
-    let res = await app.wasm.instantiateContract(
-      info.sender,
-      info.funds,
-      codeId,
-      {}
-    );
-    if (res.err) {
-      throw new Error(res.val);
-    }
-    contractAddress = getContractAddress(res.val);
+    testContract = await testCode.instantiate({ codeId, funds: info.funds });
   });
 
   it('attributes get added to `wasm` event and events are prefixed with `wasm-`', async () => {
@@ -148,28 +134,27 @@ describe('Events', function () {
       attr('A2-K', 'A2-V')
     );
 
-    let res = await app.wasm.executeContract(
+    let res = await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
     expect(res.val).toEqual({
       events: [
-        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', testContract.address]]),
         event('wasm', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['A1-K', 'A1-V'],
           ['A2-K', 'A2-V'],
         ]),
         event('wasm-EV1', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['EV1-K1', 'EV1-V1'],
           ['EV1-K2', 'EV1-V2'],
         ]),
         event('wasm-EV2', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['EV2-K1', 'EV2-V1'],
           ['EV2-K2', 'EV2-V2'],
         ]),
@@ -184,37 +169,36 @@ describe('Events', function () {
       sub(2, run(err('error-S2')), ReplyOn.Error)
     );
 
-    let res = await app.wasm.executeContract(
+    let res = await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
     expect(res.val).toEqual({
       data: null,
       events: [
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
         event('wasm-push', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key', 'value'],
         ]),
         event('reply', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['mode', 'handle_success'],
         ]),
         event('wasm-reply_id', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key1', 'value1'],
         ]),
         event('reply', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['mode', 'handle_failure'],
         ]),
         event('wasm-reply_inv', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['err', 'custom: error-S2'],
         ]),
       ],
@@ -231,52 +215,51 @@ describe('Events', function () {
       )
     );
 
-    let res = await app.wasm.executeContract(
+    let res = await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
     expect(res.val).toEqual({
       data: null,
       events: [
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
         event('wasm-push', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key', 'value'],
         ]),
         event('reply', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['mode', 'handle_success'],
         ]),
         event('wasm-reply_id', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key1', 'value1'],
         ]),
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
-        event('execute', [['_contract_addr', contractAddress]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
+        event('execute', [['_contract_addr', testContract.address]]),
         event('wasm-push', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key', 'value'],
         ]),
         event('reply', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['mode', 'handle_success'],
         ]),
         event('wasm-reply_id', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key1', 'value1'],
         ]),
         event('reply', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['mode', 'handle_success'],
         ]),
         event('wasm-reply_id', [
-          ['_contract_addr', contractAddress],
+          ['_contract_addr', testContract.address],
           ['key1', 'value1'],
         ]),
       ],
@@ -285,32 +268,22 @@ describe('Events', function () {
 });
 
 describe('Rollback', function () {
-  let contractAddress: string;
+  let testContract: TestContractInstance;
 
   beforeEach(async () => {
-    let res = await app.wasm.instantiateContract(
-      info.sender,
-      info.funds,
-      codeId,
-      {}
-    );
-    if (res.err) {
-      throw new Error(res.val);
-    }
-    contractAddress = getContractAddress(res.val);
+    testContract = await testCode.instantiate({ codeId, funds: info.funds });
   });
 
   it('control case', async () => {
     let executeMsg = run(msg(push('A')), msg(push('B')));
 
-    let res = await app.wasm.executeContract(
+    await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
-    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    let queryRes = await app.wasm.query(testContract.address, { get_buffer: {} });
     expect(queryRes.val).toEqual({
       buffer: ['A', 'B'],
     });
@@ -319,14 +292,13 @@ describe('Rollback', function () {
   it('rollbacks if message fails', async () => {
     let executeMsg = run(msg(push('A')), msg(push('B')), err('error'));
 
-    let res = await app.wasm.executeContract(
+    await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
-    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    let queryRes = await app.wasm.query(testContract.address, { get_buffer: {} });
     expect(queryRes.val).toEqual({
       buffer: [],
     });
@@ -339,14 +311,13 @@ describe('Rollback', function () {
       msg(push('D'))
     );
 
-    let res = await app.wasm.executeContract(
+    await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
-    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    let queryRes = await app.wasm.query(testContract.address, { get_buffer: {} });
     expect(queryRes.val).toEqual({
       buffer: ['A', 'D'],
     });
@@ -371,16 +342,13 @@ describe('Rollback', function () {
       msg(push('F'))
     );
 
-    let trace: any = [];
-    let res = await app.wasm.executeContract(
+    await testContract.execute(
       info.sender,
-      info.funds,
-      contractAddress,
       executeMsg,
-      trace
+      info.funds,
     );
 
-    let queryRes = await app.wasm.query(contractAddress, { get_buffer: {} });
+    let queryRes = await app.wasm.query(testContract.address, { get_buffer: {} });
     expect(queryRes.val).toEqual({
       buffer: ['A', 'B', 'E', 'F'],
     });
@@ -388,29 +356,19 @@ describe('Rollback', function () {
 });
 
 describe('Data', () => {
-  let contractAddress: string;
+  let testContract: TestContractInstance;
 
   beforeEach(async () => {
-    let res = await app.wasm.instantiateContract(
-      info.sender,
-      info.funds,
-      codeId,
-      {}
-    );
-    if (res.err) {
-      throw new Error(res.val);
-    }
-    contractAddress = getContractAddress(res.val);
+    testContract = await testCode.instantiate({ codeId, funds: info.funds });
   });
 
   it('control case', async () => {
     let executeMsg = run(msg(push('S1')), data([1]));
 
-    let res = await app.wasm.executeContract(
+    let res = await testContract.execute(
       info.sender,
+      executeMsg,
       info.funds,
-      contractAddress,
-      executeMsg
     );
 
     expect(res.val).toMatchObject({
@@ -431,19 +389,10 @@ describe('Data', () => {
 });
 
 describe('TraceLog', () => {
-  let contractAddress: string;
+  let testContract: TestContractInstance;
 
   beforeEach(async () => {
-    let res = await app.wasm.instantiateContract(
-      info.sender,
-      info.funds,
-      codeId,
-      {}
-    );
-    if (res.err) {
-      throw new Error(res.val);
-    }
-    contractAddress = getContractAddress(res.val);
+    testContract = await testCode.instantiate({ codeId, funds: info.funds });
   });
 
   it('works', async () => {
@@ -453,13 +402,12 @@ describe('TraceLog', () => {
       sub(1, run(sub(1, debug('S2'), ReplyOn.Success)), ReplyOn.Success)
     );
 
-    let trace: any[] = [];
-    let res = await app.wasm.executeContract(
+    let trace: TraceLog[] = [];
+    await testContract.execute(
       info.sender,
-      info.funds,
-      contractAddress,
       executeMsg,
-      trace
+      info.funds,
+      trace,
     );
 
     expect(trace).toMatchObject([
@@ -498,34 +446,24 @@ describe('TraceLog', () => {
 });
 
 describe('Query', () => {
-  let contractAddress: string;
+  let testContract: TestContractInstance;
   
   beforeEach(async () => {
-    let res = await app.wasm.instantiateContract(
-      info.sender,
-      info.funds,
-      codeId,
-      {}
-    );
-    if (res.err) {
-      throw new Error(res.val);
-    }
-    contractAddress = getContractAddress(res.val);
+    testContract = await testCode.instantiate({ codeId, funds: info.funds });
   });
   
   it('smart', async () => {
     let executeMsg = push('foobar');
     
-    await app.wasm.executeContract(
+    await testContract.execute(
       info.sender,
-      info.funds,
-      contractAddress,
       executeMsg,
+      info.funds,
     );
     
     let res = await app.wasm.handleQuery({
       smart: {
-        contract_addr: contractAddress,
+        contract_addr: testContract.address,
         msg: toBinary({ get_buffer: {} }),
       },
     });
@@ -543,14 +481,14 @@ describe('Query', () => {
       await app.wasm.executeContract(
         info.sender,
         info.funds,
-        contractAddress,
+        testContract.address,
         push(`foobar${i}`),
       );
     }
     
     let res = await app.wasm.handleQuery({
       raw: {
-        contract_addr: contractAddress,
+        contract_addr: testContract.address,
         key: toBase64(toAscii('buffer')),
       },
     });
@@ -561,7 +499,7 @@ describe('Query', () => {
   it('contract info', async () => {
     let res = await app.wasm.handleQuery({
       contract_info: {
-        contract_addr: contractAddress,
+        contract_addr: testContract.address,
       },
     });
     
