@@ -1,8 +1,9 @@
 import { Coin } from '@cosmjs/amino';
 import { readFileSync } from 'fs';
-import { Event, ReplyOn } from '../src/types';
+import { Binary, Event, ReplyOn, TraceLog } from '../src/types';
 import { CWSimulateApp } from '../src/CWSimulateApp';
 import { BankMessage } from '../src/modules/bank';
+import { toBinary } from '../src/util';
 
 export const DEFAULT_CREATOR = 'terra1hgm0p7khfk85zpz5v0j8wnej3a90w709vhkdfu';
 const BYTECODE = readFileSync(`${__dirname}/cw_simulate_tests-aarch64.wasm`);
@@ -44,12 +45,37 @@ type Command =
   | DataCommand
   | ThrowCommand;
 
-export function run(...program: Command[]) {
-  return {
-    run: {
-      program,
-    },
-  };
+interface InstantiateParams {
+  codeId: number;
+  admin?: string | null;
+  msg: any;
+  funds?: Coin[];
+  label: string;
+}
+
+export const exec = {
+  run(...program: Command[]) {
+    return {
+      run: {
+        program,
+      },
+    };
+  },
+  debug: (msg: string)  => ({ debug: { msg }}),
+  push: (data: string) => ({ push: { data }}),
+  pop: () => ({ pop: {} }),
+  reset: () => ({ reset: {} }),
+  instantiate({ codeId, admin, msg, funds = [], label }: InstantiateParams) {
+    return {
+      instantiate: {
+        code_id: codeId,
+        admin: admin || null,
+        msg: toBinary(msg),
+        funds,
+        label,
+      },
+    };
+  }
 }
 
 export const cmd = {
@@ -153,7 +179,7 @@ export class TestContractInstance {
     sender: string,
     msg: any,
     funds: Coin[] = [],
-    trace: any[] = []
+    trace: TraceLog[] = []
   ) {
     return await this.app.wasm.executeContract(
       sender,
