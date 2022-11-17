@@ -5,75 +5,75 @@
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "files": [
-	"dist"
+    "dist"
   ],
   "engines": {
-	"node": ">=18"
+    "node": ">=18"
   },
   "repository": "https://github.com/terran-one/cw-simulate",
   "author": "Terran One LLC",
   "license": "MIT",
   "private": false,
   "devDependencies": {
-	"@osmonauts/telescope": "^0.72.0",
-	"@protobufs/cosmwasm": "^0.0.11",
-	"@types/bytes": "^3.1.1",
-	"@types/jest": "^29.0.0",
-	"@types/lodash": "^4.14.187",
-	"buffer": "^6.0.3",
-	"bytes": "^3.1.2",
-	"crypto-browserify": "^3.12.0",
-	"jest": "^29.2.0",
-	"path-browserify": "^1.0.1",
-	"prettier": "^2.7.1",
-	"stream-browserify": "^3.0.0",
-	"ts-jest": "^29.0.3",
-	"ts-loader": "^9.3.1",
-	"ts-node": "^10.9.1",
-	"tsconfig-paths-webpack-plugin": "^4.0.0",
-	"typescript": "^4.8.2",
-	"webpack": "^5.74.0",
-	"webpack-cli": "^4.10.0"
+    "@osmonauts/telescope": "^0.72.0",
+    "@protobufs/cosmwasm": "^0.0.11",
+    "@types/bytes": "^3.1.1",
+    "@types/jest": "^29.0.0",
+    "@types/lodash": "^4.14.187",
+    "buffer": "^6.0.3",
+    "bytes": "^3.1.2",
+    "crypto-browserify": "^3.12.0",
+    "jest": "^29.2.0",
+    "path-browserify": "^1.0.1",
+    "prettier": "^2.7.1",
+    "stream-browserify": "^3.0.0",
+    "ts-jest": "^29.0.3",
+    "ts-loader": "^9.3.1",
+    "ts-node": "^10.9.1",
+    "tsconfig-paths-webpack-plugin": "^4.0.0",
+    "typescript": "^4.8.2",
+    "webpack": "^5.74.0",
+    "webpack-cli": "^4.10.0"
   },
   "dependencies": {
-	"@cosmjs/amino": "^0.28.13",
-	"@cosmjs/crypto": "^0.28.13",
-	"@cosmjs/encoding": "^0.28.13",
-	"@terran-one/cosmwasm-vm-js": "^0.2.15",
-	"immutable": "^4.1.0",
-	"lobyte": "^0.0.3",
-	"lodash": "^4.17.21",
-	"ts-pattern": "^4.0.5",
-	"ts-results": "^3.3.0",
-	"tslib": "^2.4.0"
+    "@cosmjs/amino": "^0.28.13",
+    "@cosmjs/crypto": "^0.28.13",
+    "@cosmjs/encoding": "^0.28.13",
+    "@terran-one/cosmwasm-vm-js": "^0.2.16",
+    "immutable": "^4.1.0",
+    "lobyte": "^0.0.3",
+    "lodash": "^4.17.21",
+    "ts-pattern": "^4.0.5",
+    "ts-results": "^3.3.0",
+    "tslib": "^2.4.0"
   },
   "scripts": {
-	"build": "tsc --module commonjs && webpack --mode production",
-	"test": "jest",
-	"bench": "ts-node bench/snapshot.ts",
-	"format": "prettier --check ./src/**/*.ts",
-	"format:fix": "prettier --write ./src/**/*.ts",
-	"lint": "eslint src --ext .js,.ts",
-	"lint:fix": "eslint src --ext .js,.ts --fix",
-	"doc": "typedoc",
-	"prepublishOnly": "npm run build"
+    "build": "tsc --module commonjs && webpack --mode production",
+    "test": "jest",
+    "bench": "ts-node bench/snapshot.ts",
+    "format": "prettier --check ./src/**/*.ts",
+    "format:fix": "prettier --write ./src/**/*.ts",
+    "lint": "eslint src --ext .js,.ts",
+    "lint:fix": "eslint src --ext .js,.ts --fix",
+    "doc": "typedoc",
+    "prepublishOnly": "npm run build"
   },
   "lint-staged": {
-	"./src/**/*.ts": [
-	  "npm run lint:fix",
-	  "npm run format:fix"
-	]
+    "./src/**/*.ts": [
+      "npm run lint:fix",
+      "npm run format:fix"
+    ]
   },
   "husky": {
-	"hooks": {
-	  "pre-commit": "lint-staged",
-	  "post-checkout": "npm i"
-	}
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "post-checkout": "npm i"
+    }
   },
   "prettier": {
-	"semi": true,
-	"singleQuote": true,
-	"trailingComma": "es5",
-	"arrowParens": "avoid"
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "arrowParens": "avoid"
   }
 }
