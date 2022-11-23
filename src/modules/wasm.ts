@@ -119,8 +119,8 @@ export class WasmModule {
     );
   }
 
-  getContractStorage(contractAddress: string) {
-    const existing = this.chain.store.getIn([
+  getContractStorage(contractAddress: string, storage = this.chain.store) {
+    const existing = storage.getIn([
       'wasm',
       'contractStorage',
       contractAddress,
@@ -135,8 +135,8 @@ export class WasmModule {
     );
   }
 
-  getCodeInfo(codeId: number): CodeInfo {
-    return this.chain.store.getIn(['wasm', 'codes', codeId]) as CodeInfo;
+  getCodeInfo(codeId: number, storage = this.chain.store): CodeInfo {
+    return storage.getIn(['wasm', 'codes', codeId]) as CodeInfo;
   }
 
   setContractInfo(contractAddress: string, contractInfo: ContractInfo) {
@@ -146,8 +146,8 @@ export class WasmModule {
     );
   }
 
-  getContractInfo(contractAddress: string) {
-    return this.chain.store.getIn([
+  getContractInfo(contractAddress: string, storage = this.chain.store) {
+    return storage.getIn([
       'wasm',
       'contracts',
       contractAddress,
@@ -636,6 +636,31 @@ export class WasmModule {
     let env = this.getExecutionEnv(contractAddress);
     return fromRustResult(vm.query(env, queryMsg).json as RustResult<string>)
       .andThen(v => Ok(fromBinary(v)));
+  }
+  
+  queryTrace(
+    trace: TraceLog,
+    queryMsg: any,
+  ): Result<any, string> {
+    let { contractAddress, storeSnapshot } = trace;
+    let vm = this.vms[contractAddress];
+    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
+    
+    // time travel
+    const currBackend = vm.backend;
+    const storage = new BasicKVIterStorage(this.getContractStorage(contractAddress, storeSnapshot));
+    vm.backend = {
+      ...vm.backend,
+      storage,
+    };
+    
+    try {
+      return this.query(contractAddress, queryMsg);
+    }
+    // reset time travel
+    finally {
+      vm.backend = currBackend;
+    }
   }
 
   buildAppResponse(
