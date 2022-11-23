@@ -536,11 +536,13 @@ describe('Query', () => {
       traces,
     );
     
-    expect(app.wasm.query(testContract.address, queryMsg).val).toMatchObject({
-      buffer: ['M1', 'M2', 'M3', 'M4'],
-    });
     expect(app.wasm.queryTrace(traces[0], queryMsg).val).toMatchObject({
       buffer: ['M1', 'M2', 'M3'],
+    });
+    // IMPORTANT: `queryTrace` temporarily alters the backend a VM uses
+    // so we test here that it resets it
+    expect(app.wasm.query(testContract.address, queryMsg).val).toMatchObject({
+      buffer: ['M1', 'M2', 'M3', 'M4'],
     });
   });
 });
