@@ -509,4 +509,40 @@ describe('Query', () => {
       admin: null,
     });
   });
+  
+  it('time travel', async () => {
+    const queryMsg = {
+      get_buffer: {},
+    };
+    
+    const traces: TraceLog[] = [];
+    await testContract.execute(
+      info.sender,
+      exec.run(
+        cmd.msg(exec.push('M1')),
+        cmd.msg(exec.push('M2')),
+        cmd.msg(exec.push('M3')),
+      ),
+      [],
+      traces,
+    );
+    
+    await testContract.execute(
+      info.sender,
+      exec.run(
+        cmd.msg(exec.push('M4')),
+      ),
+      [],
+      traces,
+    );
+    
+    expect(app.wasm.queryTrace(traces[0], queryMsg).val).toMatchObject({
+      buffer: ['M1', 'M2', 'M3'],
+    });
+    // IMPORTANT: `queryTrace` temporarily alters the backend a VM uses
+    // so we test here that it resets it
+    expect(app.wasm.query(testContract.address, queryMsg).val).toMatchObject({
+      buffer: ['M1', 'M2', 'M3', 'M4'],
+    });
+  });
 });
