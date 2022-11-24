@@ -70,3 +70,21 @@ console.log('executeContract:', result.constructor.name, JSON.stringify(result, 
 result = await app.wasm.query(contractAddress, { get_count: {} });
 console.log('query:', result.constructor.name, JSON.stringify(result, null, 2));
 ```
+
+## Using with Vue.js and vite
+
+Vite doesn't include shims for Node variables like Webpack 4 does, and cw-simulate currently relies on these. The following workaround exists:
+
+1. Add the `buffer` package (`npm add buffer`)
+2. Add the following to your `index.html` (inside the `body` tag, before your other js imports):
+```html
+<script>
+  window.global = window;
+</script>
+<script type="module">
+  import {Buffer} from "buffer";
+  window.Buffer = Buffer;
+</script>
+```
+
+See [this github issue](https://github.com/vitejs/vite/issues/2618) for more details.
