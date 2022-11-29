@@ -120,6 +120,11 @@ export class BankModule {
   public getBalances() {
     return (this.chain.store.getIn(['bank', 'balances'], Map([])) as Map<string, Coin[]>);
   }
+  
+  public deleteBalance(address:string) {
+    this.chain.store = this.chain.store.deleteIn( ['bank', 'balances', address]);
+
+  }
 
   public async handleMsg(
       sender: string,
