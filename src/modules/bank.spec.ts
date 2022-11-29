@@ -180,4 +180,19 @@ describe('BankModule', () => {
       ],
     });
   });
+    it('handle delete', () => {
+    // Arrange
+    const bank = chain.bank;
+    bank.setBalance('alice', [{denom: 'foo', amount: '1000'}]);
+    bank.setBalance('bob', [{denom: 'fizz', amount: '900'}]);
+
+    // Act
+    bank.deleteBalance('bob');
+
+    // Assert
+    expect(bank.getBalance('alice')).toBeDefined();
+    expect(bank.getBalances()).toEqual(Map([
+      ['alice', [{denom: 'foo', amount: '1000'}]]
+    ]));
+  });
 });
