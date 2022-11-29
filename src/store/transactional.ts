@@ -1,4 +1,4 @@
-import { List, Map } from "immutable";
+import { fromJS, isCollection, isMap, List, Map } from "immutable";
 import { Ok, Result } from "ts-results";
 
 type Primitive = boolean | number | bigint | string | null | undefined | symbol;
@@ -20,27 +20,28 @@ type Lens<T, P extends PropertyKey[]> =
 type Immutify<T> =
   T extends Primitive
   ? T
-  : T extends (infer E)[]
+  : T extends ArrayLike<infer E>
   ? List<Immutify<E>>
   : T extends Record<infer K, infer V>
-  ? Map<K, V>
+  ? Map<K, Immutify<V>>
   : T;
 
 type TxUpdater = (set: TxSetter) => void;
 type TxSetter = (current: Map<unknown, unknown>) => Map<unknown, unknown>;
-type LensSetter<T> = <P extends PropertyKey[]>(...path: P) => ((value: Immutify<Lens<T, P>>) => void);
+type LensSetter<T> = <P extends PropertyKey[]>(...path: P) => ((value: Lens<T, P> | Immutify<Lens<T, P>>) => void);
+type LensDeleter = <P extends PropertyKey[]>(...path: P) => void;
 
 /** Transactional database underlying multi-module chain storage. */
 export class Transactional {
-  private _data = Map();
-  
-  constructor() {}
+  constructor(private _data = Map()) {}
   
   lens<M extends object>(...path: PropertyKey[]) {
     return new TransactionalLens<M>(this, path);
   }
   
-  tx<R extends Result<any, any>>(cb: (update: TxUpdater) => R): R {
+  tx<R extends Result<any, any>>(cb: (update: TxUpdater) => Promise<R>): Promise<R>;
+  tx<R extends Result<any, any>>(cb: (update: TxUpdater) => R): R;
+  tx<R extends Result<any, any>>(cb: (update: TxUpdater) => R | Promise<R>): R | Promise<R> {
     let valid = true;
     const snapshot = this._data;
     const updater: TxUpdater = setter => {
@@ -50,10 +51,24 @@ export class Transactional {
     
     try {
       const result = cb(updater);
-      if (result.err) {
-        this._data = snapshot;
+      if ('then' in result) {
+        return result.then(r => {
+          if (r.err) {
+            this._data = snapshot;
+          }
+          return r;
+        })
+        .catch(reason => {
+          this._data = snapshot;
+          return reason;
+        })
       }
-      return result;
+      else {
+        if (result.err) {
+          this._data = snapshot;
+        }
+        return result;
+      }
     }
     catch (ex) {
       this._data = snapshot;
@@ -74,22 +89,32 @@ export class TransactionalLens<M extends object> {
   
   initialize(data: M) {
     this.db.tx(update => {
-      update(curr => curr.setIn([...this.prefix], Map(data)));
+      const coll = fromJS(data);
+      if (!isCollection(coll)) throw new Error('Not an Immutable.Map');
+      update(curr => curr.setIn([...this.prefix], coll));
       return Ok(undefined);
     }).unwrap();
+    return this;
   }
   
   get<P extends PropertyKey[]>(...path: P): Immutify<Lens<M, P>> {
     return this.db.data.getIn([...this.prefix, ...path]) as any;
   }
   
-  tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>) => R): R {
+  tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => Promise<R>): Promise<R>;
+  tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => R): R;
+  tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => R | Promise<R>): R | Promise<R> {
+    //@ts-ignore
     return this.db.tx(update => {
       const setter: LensSetter<M> = <P extends PropertyKey[]>(...path: P) =>
-        (value: Immutify<Lens<M, P>>) => {
-          update(curr => curr.setIn([...this.prefix, ...path], value));
+        (value: Lens<M, P> | Immutify<Lens<M, P>>) => {
+          const v = isCollection(value) ? value : fromJS(value);
+          update(curr => curr.setIn([...this.prefix, ...path], v));
         }
-      return cb(setter);
+      const deleter: LensDeleter = <P extends PropertyKey[]>(...path: P) => {
+        update(curr => curr.deleteIn([...this.prefix, ...path]));
+      }
+      return cb(setter, deleter);
     });
   }
   

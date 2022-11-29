@@ -117,6 +117,8 @@ type CallDebugLog<T extends keyof CosmWasmAPI = keyof CosmWasmAPI> = {
   [K in T]: { fn: K } & CosmWasmAPI[K];
 }>;
 
+export type Snapshot = Immutable.Map<unknown, unknown>;
+
 interface TraceLogCommon {
   type: string;
   contractAddress: string;
@@ -125,7 +127,7 @@ interface TraceLogCommon {
   response: RustResult<ContractResponse>;
   logs: DebugLog[];
   trace?: TraceLog[];
-  storeSnapshot: Immutable.Map<string, any>;
+  storeSnapshot: Snapshot;
   result: Result<AppResponse, string>;
 }
 
