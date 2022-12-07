@@ -1,4 +1,4 @@
-import { fromJS, isCollection, isMap, List, Map } from "immutable";
+import { fromJS, isCollection, isList, isMap, List, Map } from "immutable";
 import { Ok, Result } from "ts-results";
 
 type Primitive = boolean | number | bigint | string | null | undefined | symbol;
@@ -101,6 +101,10 @@ export class TransactionalLens<M extends object> {
     return this.db.data.getIn([...this.prefix, ...path]) as any;
   }
   
+  getObject<P extends PropertyKey[]>(...path: P): Lens<M, P> {
+    return fromImmutable(this.get(...path));
+  }
+  
   tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => Promise<R>): Promise<R>;
   tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => R): R;
   tx<R extends Result<any, any>>(cb: (setter: LensSetter<M>, deleter: LensDeleter) => R | Promise<R>): R | Promise<R> {
@@ -123,4 +127,29 @@ export class TransactionalLens<M extends object> {
   }
   
   get data() { return this.db.data.getIn([...this.prefix]) as Immutify<M> }
+}
+
+function fromImmutable(value: any): any {
+  if (isMap(value)) {
+    return fromImmutable(value.toObject());
+  }
+  else if (isList(value)) {
+    return fromImmutable(value.toArray());
+  }
+  else if (typeof value === 'object') {
+    if (typeof value.length === 'number' && 0 in value && value.length-1 in value) {
+      for (let i = 0; i < value.length; ++i) {
+        value[i] = fromImmutable(value[i]);
+      }
+    }
+    else {
+      for (const prop in value) {
+        value[prop] = fromImmutable(value[prop]);
+      }
+    }
+    return value;
+  }
+  else {
+    return value;
+  }
 }
