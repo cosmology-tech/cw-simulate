@@ -31,7 +31,7 @@ import {
 import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
 import { fromBinary, fromRustResult, toBinary } from '../util';
-import { Transactional, TransactionalLens } from '../store/transactional';
+import { NEVER_IMMUTIFY, Transactional, TransactionalLens } from '../store/transactional';
 
 function numberToBigEndianUint64(n: number): Uint8Array {
   const buffer = new ArrayBuffer(8);
@@ -310,6 +310,7 @@ export class WasmModule {
       if ('error' in response) {
         let result = Err(response.error);
         trace.push({
+          [NEVER_IMMUTIFY]: true,
           type: 'instantiate' as 'instantiate',
           contractAddress,
           msg: instantiateMsg,
@@ -350,6 +351,7 @@ export class WasmModule {
         );
 
         trace.push({
+          [NEVER_IMMUTIFY]: true,
           type: 'instantiate' as 'instantiate',
           contractAddress,
           msg: instantiateMsg,
@@ -420,6 +422,7 @@ export class WasmModule {
         let result = Err(response.error);
         
         trace.push({
+          [NEVER_IMMUTIFY]: true,
           type: 'execute' as 'execute',
           contractAddress,
           msg: executeMsg,
@@ -462,6 +465,7 @@ export class WasmModule {
         );
         
         trace.push({
+          [NEVER_IMMUTIFY]: true,
           type: 'execute' as 'execute',
           contractAddress,
           msg: executeMsg,
@@ -613,6 +617,7 @@ export class WasmModule {
       let result = Err(response.error);
       
       trace.push({
+        [NEVER_IMMUTIFY]: true,
         type: 'reply' as 'reply',
         contractAddress,
         env: this.getExecutionEnv(contractAddress),
@@ -656,6 +661,7 @@ export class WasmModule {
       );
       
       trace.push({
+        [NEVER_IMMUTIFY]: true,
         type: 'reply' as 'reply',
         contractAddress,
         msg: replyMsg,

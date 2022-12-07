@@ -1,7 +1,13 @@
-import { fromJS, isCollection, isList, isMap, List, Map } from "immutable";
+import { isCollection, isList, isMap, List, Map } from "immutable";
 import { Ok, Result } from "ts-results";
+import { isArrayLike } from "../util";
+
+// NEVER_IMMUTIFY is a string because that's easily serializable with different algorithms - symbols are not
+export type NeverImmutify = typeof NEVER_IMMUTIFY;
+export const NEVER_IMMUTIFY = '__NEVER_IMMUTIFY__';
 
 type Primitive = boolean | number | bigint | string | null | undefined | symbol;
+type NoImmutify = Primitive | ArrayBuffer | ArrayBufferView | { [NEVER_IMMUTIFY]: any };
 
 type Prefix<P, T extends any[]> = [P, ...T];
 type First<T extends any[]> = T extends Prefix<infer F, any[]> ? F : never;
@@ -18,7 +24,7 @@ type Lens<T, P extends PropertyKey[]> =
   : T;
 
 type Immutify<T> =
-  T extends Primitive
+  T extends NoImmutify
   ? T
   : T extends ArrayLike<infer E>
   ? List<Immutify<E>>
@@ -89,7 +95,7 @@ export class TransactionalLens<M extends object> {
   
   initialize(data: M) {
     this.db.tx(update => {
-      const coll = fromJS(data);
+      const coll = toImmutable(data);
       if (!isCollection(coll)) throw new Error('Not an Immutable.Map');
       update(curr => curr.setIn([...this.prefix], coll));
       return Ok(undefined);
@@ -112,8 +118,7 @@ export class TransactionalLens<M extends object> {
     return this.db.tx(update => {
       const setter: LensSetter<M> = <P extends PropertyKey[]>(...path: P) =>
         (value: Lens<M, P> | Immutify<Lens<M, P>>) => {
-          const v = isCollection(value) ? value : fromJS(value);
-          update(curr => curr.setIn([...this.prefix, ...path], v));
+          update(curr => curr.setIn([...this.prefix, ...path], toImmutable(value)));
         }
       const deleter: LensDeleter = <P extends PropertyKey[]>(...path: P) => {
         update(curr => curr.deleteIn([...this.prefix, ...path]));
@@ -129,14 +134,52 @@ export class TransactionalLens<M extends object> {
   get data() { return this.db.data.getIn([...this.prefix]) as Immutify<M> }
 }
 
+function toImmutable(value: any): any {
+  // passthru Immutable collections
+  if (isCollection(value)) return value;
+  
+  // don't touch ArrayBuffers & ArrayBufferViews - freeze them
+  if (ArrayBuffer.isView(value)) {
+    Object.freeze(value.buffer);
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    Object.freeze(value);
+    return value;
+  }
+  
+  // recurse into arrays & objects, converting them to lists & maps
+  // skip primitives & objects that don't want to be touched
+  if (typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
+    if (isArrayLike(value)) {
+      return List(value.map(item => toImmutable(item)));
+    } else {
+      return Map(
+        Object.entries(value).map(
+          ([key, value]) => [key, toImmutable(value)]
+        )
+      );
+    }
+  }
+  
+  return value;
+}
+
 function fromImmutable(value: any): any {
+  // reverse Immutable maps & lists
   if (isMap(value)) {
     return fromImmutable(value.toObject());
   }
-  else if (isList(value)) {
+  if (isList(value)) {
     return fromImmutable(value.toArray());
   }
-  else if (typeof value === 'object') {
+  
+  // passthru ArrayBuffers & ArrayBufferViews
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return value;
+  
+  // revert objects & arrays
+  // but: passthru objects w/ NEVER_IMMUTIFY
+  if (typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
     if (typeof value.length === 'number' && 0 in value && value.length-1 in value) {
       for (let i = 0; i < value.length; ++i) {
         value[i] = fromImmutable(value[i]);
@@ -149,7 +192,6 @@ function fromImmutable(value: any): any {
     }
     return value;
   }
-  else {
-    return value;
-  }
+  
+  return value;
 }

@@ -1,5 +1,6 @@
 import Immutable from 'immutable';
 import { Result } from 'ts-results';
+import type { NEVER_IMMUTIFY } from './store/transactional';
 
 export interface ContractResponse {
   messages: SubMsg[];
@@ -120,6 +121,7 @@ type CallDebugLog<T extends keyof CosmWasmAPI = keyof CosmWasmAPI> = {
 export type Snapshot = Immutable.Map<unknown, unknown>;
 
 interface TraceLogCommon {
+  [NEVER_IMMUTIFY]: true;
   type: string;
   contractAddress: string;
   env: ExecuteEnv;

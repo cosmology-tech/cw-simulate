@@ -2,6 +2,8 @@ import { fromBase64, fromUtf8, toBase64, toUtf8 } from "@cosmjs/encoding";
 import { Err, Ok, Result } from "ts-results";
 import { Binary, RustResult } from "./types";
 
+export const isArrayLike = (value: any): value is any[] => typeof value === 'object' && typeof value.length === 'number' && value[0] && value[value.length-1];
+
 export const toBinary = (value: any): Binary => toBase64(toUtf8(JSON.stringify(value)));
 export const fromBinary = (str: string): unknown => JSON.parse(fromUtf8(fromBase64(str)));
 
