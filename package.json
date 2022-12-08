@@ -1,6 +1,6 @@
 {
   "name": "@terran-one/cw-simulate",
-  "version": "2.7.2",
+  "version": "2.7.3",
   "description": "Mock blockchain environment for simulating CosmWasm interactions",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
