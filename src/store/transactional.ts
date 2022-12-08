@@ -134,7 +134,7 @@ export class TransactionalLens<M extends object> {
   get data() { return this.db.data.getIn([...this.prefix]) as Immutify<M> }
 }
 
-function toImmutable(value: any): any {
+export function toImmutable(value: any): any {
   // passthru Immutable collections
   if (isCollection(value)) return value;
   
@@ -150,7 +150,7 @@ function toImmutable(value: any): any {
   
   // recurse into arrays & objects, converting them to lists & maps
   // skip primitives & objects that don't want to be touched
-  if (typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
+  if (value && typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
     if (isArrayLike(value)) {
       return List(value.map(item => toImmutable(item)));
     } else {
@@ -165,7 +165,7 @@ function toImmutable(value: any): any {
   return value;
 }
 
-function fromImmutable(value: any): any {
+export function fromImmutable(value: any): any {
   // reverse Immutable maps & lists
   if (isMap(value)) {
     return fromImmutable(value.toObject());
@@ -179,7 +179,7 @@ function fromImmutable(value: any): any {
   
   // revert objects & arrays
   // but: passthru objects w/ NEVER_IMMUTIFY
-  if (typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
+  if (value && typeof value === 'object' && !(NEVER_IMMUTIFY in value)) {
     if (typeof value.length === 'number' && 0 in value && value.length-1 in value) {
       for (let i = 0; i < value.length; ++i) {
         value[i] = fromImmutable(value[i]);
