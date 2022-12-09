@@ -31,7 +31,7 @@ export class CWSimulateApp {
     this.bech32Prefix = options.bech32Prefix;
     this.store = new Transactional().lens<ChainData>().initialize({
       height: 1,
-      time: 0,
+      time: Date.now(),
     });
 
     this.wasm = new WasmModule(this);
@@ -51,6 +51,17 @@ export class CWSimulateApp {
     } else {
       return Err(`unknown message: ${JSON.stringify(msg)}`);
     }
+  }
+  
+  public pushBlock<T>(callback: () => Result<T, string>): Result<T, string>;
+  public pushBlock<T>(callback: () => Promise<Result<T, string>>): Promise<Result<T, string>>;
+  public pushBlock<T>(callback: () => Result<T, string> | Promise<Result<T, string>>): Result<T, string> | Promise<Result<T, string>> {
+    //@ts-ignore
+    return this.store.tx(setter => {
+      setter('height')(this.height + 1);
+      setter('time')(Date.now());
+      return callback();
+    });
   }
   
   get height() { return this.store.get('height') }

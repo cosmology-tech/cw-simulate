@@ -155,7 +155,7 @@ export class WasmModule {
 
   setContractInfo(contractAddress: string, contractInfo: ContractInfo) {
     this.store.tx(setter => {
-      setter('contracts', contractAddress)(Map(contractInfo));
+      setter('contracts', contractAddress)(contractInfo);
       return Ok(undefined);
     });
   }
@@ -174,16 +174,18 @@ export class WasmModule {
   }
 
   create(creator: string, wasmCode: Uint8Array): number {
-    return this.store.tx(setter => {
-      let codeInfo: CodeInfo = {
-        creator,
-        wasmCode,
-      };
+    return this.chain.pushBlock(() => {
+      return this.store.tx(setter => {
+        let codeInfo: CodeInfo = {
+          creator,
+          wasmCode,
+        };
 
-      const codeId = this.lastCodeId + 1;
-      this.setCodeInfo(codeId, codeInfo);
-      setter('lastCodeId', codeId);
-      return Ok(codeId);
+        const codeId = this.lastCodeId + 1;
+        this.setCodeInfo(codeId, codeInfo);
+        setter('lastCodeId')(codeId);
+        return Ok(codeId);
+      });
     }).unwrap();
   }
 
@@ -291,7 +293,7 @@ export class WasmModule {
     instantiateMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    return this.store.tx(async () => {
+    return this.chain.pushBlock(async () => {
       const snapshot = this.store.db.data;
       
       // first register the contract instance
@@ -406,7 +408,7 @@ export class WasmModule {
     executeMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    return this.store.tx(async () => {
+    return this.chain.pushBlock(async () => {
       let snapshot = this.store.db.data;
       let logs: DebugLog[] = [];
 

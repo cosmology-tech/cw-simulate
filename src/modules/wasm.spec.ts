@@ -389,6 +389,48 @@ describe('Data', () => {
   it.todo('if reply has no data, last data is used');
 });
 
+describe('Blocks', () => {
+  let app: CWSimulateApp
+
+  beforeEach(async () => {
+    app = new CWSimulateApp({
+      chainId: 'phoenix-1',
+      bech32Prefix: 'terra1',
+    });
+  });
+  
+  it('increases block height with new codes & instances', async () => {
+    let height = app.height;
+    expect(height).toStrictEqual(1);
+    
+    await new TestContract(app, info.sender).instantiate({ funds: info.funds });
+    expect(app.height).toBeGreaterThan(height);
+    height = app.height;
+    
+    await new TestContract(app, info.sender).instantiate({ funds: info.funds });
+    expect(app.height).toBeGreaterThan(height);
+    height = app.height;
+  });
+  
+  it('increases block height with executions', async () => {
+    let height = app.height;
+    const contract = await new TestContract(app, info.sender).instantiate({ funds: info.funds });
+    
+    contract.execute(info.sender,
+      cmd.push('foobar'),
+      info.funds,
+    );
+    expect(app.height).toBeGreaterThan(height);
+    
+    height = app.height;
+    contract.execute(info.sender,
+      cmd.push('barfoo'),
+      info.funds,
+    );
+    expect(app.height).toBeGreaterThan(height);
+  });
+});
+
 describe('TraceLog', () => {
   let testContract: TestContractInstance;
 
