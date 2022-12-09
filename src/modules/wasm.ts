@@ -293,7 +293,7 @@ export class WasmModule {
     instantiateMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    return this.chain.pushBlock(async () => {
+    return await this.chain.pushBlock(async () => {
       const snapshot = this.store.db.data;
       
       // first register the contract instance
@@ -411,7 +411,7 @@ export class WasmModule {
     executeMsg: any,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    return this.chain.pushBlock(async () => {
+    return await this.chain.pushBlock(async () => {
       let snapshot = this.store.db.data;
       let logs: DebugLog[] = [];
 

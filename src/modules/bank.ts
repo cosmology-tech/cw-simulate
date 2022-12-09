@@ -4,7 +4,7 @@ import { Err, Ok, Result } from 'ts-results';
 import { Binary } from '../types';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { toBinary } from '../util';
-import { TransactionalLens } from '../store/transactional';
+import { fromImmutable, toImmutable, TransactionalLens } from '../store/transactional';
 
 export interface AppResponse {
   events: any[];
@@ -123,15 +123,15 @@ export class BankModule {
     });
   }
 
-  public getBalance(address: string) {
-    const immu = this.getBalances().get(address)?.toArray();
-    return immu?.map<Coin>(immuCoin => ({
-      denom: immuCoin.get('denom')!,
-      amount: immuCoin.get('amount')!,
-    })) ?? [];
+  public getBalance(address: string): Coin[] {
+    return this.store.getObject('balances', address) ?? [];
   }
   
   public getBalances() {
+    return this.store.getObject('balances');
+  }
+  
+  public getImmutableBalances() {
     return this.store.get('balances');
   }
   

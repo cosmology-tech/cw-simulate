@@ -8,7 +8,7 @@ type WrappedBankMessage = {
   bank: BankMessage;
 };
 
-describe('BankModule', () => {
+describe.only('BankModule', () => {
   let chain: CWSimulateApp;
 
   beforeEach(function() {
@@ -21,18 +21,18 @@ describe('BankModule', () => {
   it('handle send', () => {
     // Arrange
     const bank = chain.bank;
-    bank.setBalance('alice', [{denom: 'foo', amount: '1000'}]);
+    bank.setBalance('alice', [coin('foo', 1000)]);
 
     // Act
-    bank.send('alice', 'bob', [{denom: 'foo', amount: '100'}]).unwrap();
+    bank.send('alice', 'bob', [coin('foo', 100)]).unwrap();
 
     // Assert
     expect(bank.getBalance('alice')).toEqual([coin('foo', 900)]);
     expect(bank.getBalance('bob')).toEqual([coin('foo', 100)]);
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toEqual({
       alice: [coin('foo', 900)],
       bob:   [coin('foo', 100)],
-    }));
+    });
   });
 
   it('handle send failure', () => {
@@ -45,9 +45,9 @@ describe('BankModule', () => {
 
     // Assert
     expect(res.err).toBeDefined();
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toEqual({
       alice: [coin('foo', 100)],
-    }));
+    });
     expect(bank.getBalance('alice')).toEqual([coin('foo', 100)]);
   });
 
@@ -61,25 +61,25 @@ describe('BankModule', () => {
 
     // Assert
     expect(bank.getBalance('alice')).toEqual([coin('foo', 900)]);
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toEqual({
       alice: [coin('foo', 900)],
-    }));
+    });
   });
 
   it('handle burn failure', () => {
     // Arrange
     const bank = chain.bank;
-    bank.setBalance('alice', [{denom: 'foo', amount: '100'}]);
+    bank.setBalance('alice', [coin('foo', 100)]);
 
     // Act
-    const res = bank.burn('alice', [{denom: 'foo', amount: '1000'}]);
+    const res = bank.burn('alice', [coin('foo', 1000)]);
 
     // Assert
     expect(res.err).toBeDefined()
     expect(bank.getBalance('alice')).toEqual([coin('foo', 100)]);
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toEqual({
       alice: [coin('foo', 100)],
-    }));
+    });
   });
 
   it('handle msg', () => {
@@ -92,24 +92,24 @@ describe('BankModule', () => {
       bank: {
         send: {
           to_address: 'bob',
-          amount: [{denom: 'foo', amount: '100'}],
+          amount: [coin('foo', 100)],
         }
       }
     };
     chain.handleMsg('alice', msg);
 
     // Assert
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toEqual({
       alice: [coin('foo', 900)],
       bob:   [coin('foo', 100)],
-    }));
+    });
   });
 
   it('contract integration', async () => {
     // Arrange
     const bank = chain.bank;
     const contract = await new TestContract(chain).instantiate();
-    bank.setBalance(contract.address, [{denom: 'foo', amount: '1000'}]);
+    bank.setBalance(contract.address, [coin('foo', 1000)]);
 
     // Act
     const msg = exec.run(
@@ -135,11 +135,11 @@ describe('BankModule', () => {
 
     // Assert
     expect(res.ok).toBeTruthy();
-    expect(bank.getBalances()).toEqual(fromJS({
+    expect(bank.getBalances()).toMatchObject({
       [contract.address]: [coin('foo', 700)],
       alice: [coin('foo', 100)],
       bob:   [coin('foo', 100)],
-    }));
+    });
   });
   
   it('querier integration', () => {
@@ -184,17 +184,17 @@ describe('BankModule', () => {
   it('handle delete', () => {
     // Arrange
     const bank = chain.bank;
-    bank.setBalance('alice', [{denom: 'foo', amount: '1000'}]);
-    bank.setBalance('bob', [{denom: 'fizz', amount: '900'}]);
+    bank.setBalance('alice', [coin('foo', 1000)]);
+    bank.setBalance('bob', [coin('fizz', 900)]);
 
     // Act
     bank.deleteBalance('bob');
 
     // Assert
     expect(bank.getBalance('alice')).toBeDefined();
-    expect(bank.getBalances()).toEqual(fromJS({
-      alice: [{denom: 'foo', amount: '1000'}],
-    }));
+    expect(bank.getBalances()).toEqual({
+      alice: [coin('foo', 1000)],
+    });
   });
 });
 
