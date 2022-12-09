@@ -300,6 +300,9 @@ export class WasmModule {
       const contractAddress = this.registerContractInstance(sender, codeId);
       let logs = [] as DebugLog[];
 
+      const send = this.chain.bank.send(sender, contractAddress, funds);
+      if (send.err) return send;
+
       // then call instantiate
       let response = await this.callInstantiate(
         sender,
@@ -411,6 +414,9 @@ export class WasmModule {
     return this.chain.pushBlock(async () => {
       let snapshot = this.store.db.data;
       let logs: DebugLog[] = [];
+
+      const send = this.chain.bank.send(sender, contractAddress, funds);
+      if (send.err) return send;
 
       let response = this.callExecute(
         sender,
