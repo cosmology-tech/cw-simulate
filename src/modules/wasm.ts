@@ -234,7 +234,7 @@ export class WasmModule {
   }
 
   // TODO: add admin, label, etc.
-  registerContractInstance(sender: string, codeId: number): string {
+  registerContractInstance(sender: string, codeId: number, label:string): string {
     return this.store.tx(setter => {
       const contractAddressHash = WasmModule.buildContractAddress(
         codeId,
@@ -250,7 +250,7 @@ export class WasmModule {
         codeId,
         creator: sender,
         admin: null,
-        label: '',
+        label,
         created: this.chain.height,
       };
 
@@ -291,13 +291,14 @@ export class WasmModule {
     funds: Coin[],
     codeId: number,
     instantiateMsg: any,
+    label:string,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     return await this.chain.pushBlock(async () => {
       const snapshot = this.store.db.data;
       
       // first register the contract instance
-      const contractAddress = this.registerContractInstance(sender, codeId);
+      const contractAddress = this.registerContractInstance(sender, codeId, label);
       let logs = [] as DebugLog[];
 
       const send = this.chain.bank.send(sender, contractAddress, funds);
@@ -780,12 +781,13 @@ export class WasmModule {
         );
       }
       else if ('instantiate' in wasm) {
-        let { code_id, funds, msg } = wasm.instantiate;
+        let { code_id, funds, msg, label} = wasm.instantiate;
         return await this.instantiateContract(
           sender,
           funds,
           code_id,
           fromBinary(msg),
+          label,
           trace,
         );
       }

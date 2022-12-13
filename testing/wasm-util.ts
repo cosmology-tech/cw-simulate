@@ -161,7 +161,8 @@ export class TestContract {
       opts.sender ?? this.creator,
       opts.funds ?? [],
       codeId,
-      {}
+      {},
+      "Test Contract"
     );
 
     const addr = res.unwrap().events[0].attributes[0].value;
