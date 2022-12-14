@@ -2,7 +2,16 @@ import { fromBase64, fromUtf8, toBase64, toUtf8 } from "@cosmjs/encoding";
 import { Err, Ok, Result } from "ts-results";
 import { Binary, RustResult } from "./types";
 
-export const isArrayLike = (value: any): value is any[] => typeof value === 'object' && typeof value.length === 'number';
+export const isArrayLike = (value: any): value is any[] =>
+  typeof value === 'object' && typeof value.length === 'number';
+export const isArrayBufferLike = (value: any): value is ArrayBuffer | ArrayBufferView =>
+  value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+export const getArrayBuffer = (obj: any) =>
+  ArrayBuffer.isView(obj)
+    ? obj.buffer
+    : obj instanceof ArrayBuffer
+    ? obj
+    : undefined;
 
 export const toBinary = (value: any): Binary => toBase64(toUtf8(JSON.stringify(value)));
 export const fromBinary = (str: string): unknown => JSON.parse(fromUtf8(fromBase64(str)));
