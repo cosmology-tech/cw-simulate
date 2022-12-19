@@ -17,6 +17,7 @@ export const serde = SerdeProtocol.standard()
       };
     },
     ({ data, mutable }, deref) => {
+      if (!data.length) return List();
       const list = List().asMutable();
       Reference.all(deref, data, values => {
         for (const value of values) {
@@ -38,6 +39,7 @@ export const serde = SerdeProtocol.standard()
     ({ data, mutable }, deref) => {
       const map = Map().asMutable();
       const keys = Object.keys(data);
+      if (!keys.length) return Map();
       Reference.all(deref, keys.map(k => data[k]), values => {
         values.forEach((value, i) => {
           const key = keys[i];
