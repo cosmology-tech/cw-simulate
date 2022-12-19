@@ -202,6 +202,10 @@ export class WasmModule {
     };
   }
 
+  hasVM(contractAddress: string): boolean {
+    return !!this.vms[contractAddress];
+  }
+
   async buildVM(contractAddress: string): Promise<CWSimulateVMInstance> {
     if (!(contractAddress in this.vms)) {
       const contractInfo = this.getContractInfo(contractAddress);

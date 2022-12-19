@@ -1,4 +1,3 @@
-import { fromJS } from 'immutable';
 import { cmd, exec, TestContract } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { fromBinary } from '../util';

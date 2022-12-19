@@ -42,7 +42,7 @@ export class Transactional {
   constructor(private _data = Map()) {}
   
   lens<M extends object>(...path: PropertyKey[]) {
-    return new TransactionalLens<M>(this, path);
+    return new TransactionalLens<M>(this, path.map(stringify));
   }
   
   tx<R extends Result<any, any>>(cb: (update: TxUpdater) => Promise<R>): Promise<R>;
@@ -91,7 +91,7 @@ export class Transactional {
 }
 
 export class TransactionalLens<M extends object> {
-  constructor(public readonly db: Transactional, public readonly prefix: PropertyKey[]) {}
+  constructor(public readonly db: Transactional, public readonly prefix: string[]) {}
   
   initialize(data: M) {
     this.db.tx(update => {
@@ -104,7 +104,7 @@ export class TransactionalLens<M extends object> {
   }
   
   get<P extends PropertyKey[]>(...path: P): Immutify<Lens<M, P>> {
-    return this.db.data.getIn([...this.prefix, ...path]) as any;
+    return this.db.data.getIn([...this.prefix, ...path.map(stringify)]) as any;
   }
   
   getObject<P extends PropertyKey[]>(...path: P): Lens<M, P> {
@@ -118,17 +118,17 @@ export class TransactionalLens<M extends object> {
     return this.db.tx(update => {
       const setter: LensSetter<M> = <P extends PropertyKey[]>(...path: P) =>
         (value: Lens<M, P> | Immutify<Lens<M, P>>) => {
-          update(curr => curr.setIn([...this.prefix, ...path], toImmutable(value)));
+          update(curr => curr.setIn([...this.prefix, ...path.map(stringify)], toImmutable(value)));
         }
       const deleter: LensDeleter = <P extends PropertyKey[]>(...path: P) => {
-        update(curr => curr.deleteIn([...this.prefix, ...path]));
+        update(curr => curr.deleteIn([...this.prefix, ...path.map(stringify)]));
       }
       return cb(setter, deleter);
     });
   }
   
   lens<P extends PropertyKey[]>(...path: P): TransactionalLens<Lens<M, P>> {
-    return new TransactionalLens<Lens<M, P>>(this.db, [...this.prefix, ...path]);
+    return new TransactionalLens<Lens<M, P>>(this.db, [...this.prefix, ...path.map(stringify)]);
   }
   
   get data() { return this.db.data.getIn([...this.prefix]) as Immutify<M> }
@@ -195,3 +195,5 @@ export function fromImmutable(value: any): any {
   
   return value;
 }
+
+const stringify = (v: any) => v+'';

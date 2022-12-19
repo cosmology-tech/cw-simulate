@@ -1,10 +1,9 @@
 import { QuerierBase } from '@terran-one/cosmwasm-vm-js';
-import { Map } from 'immutable';
-import { Err, Result } from 'ts-results';
+import { Err, Ok, Result } from 'ts-results';
 import { WasmModule, WasmQuery } from './modules/wasm';
 import { BankModule, BankQuery } from './modules/bank';
+import { fromImmutable, toImmutable, Transactional, TransactionalLens } from './store/transactional';
 import { AppResponse, Binary } from './types';
-import { Transactional, TransactionalLens } from './store/transactional';
 
 export interface CWSimulateAppOptions {
   chainId: string;
