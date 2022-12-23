@@ -1,12 +1,5 @@
-import { Sha256 } from '@cosmjs/crypto';
-import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding';
-import {
-  BasicBackendApi,
-  BasicKVIterStorage,
-  IBackend,
-} from '@terran-one/cosmwasm-vm-js';
-import { CWSimulateApp } from '../CWSimulateApp';
-import { CWSimulateVMInstance } from '../instrumentation/CWSimulateVMInstance';
+import { toBech32 } from '@cosmjs/encoding';
+import type { CWSimulateApp } from '../../CWSimulateApp';
 
 import {
   AppResponse,
@@ -20,26 +13,17 @@ import {
   ExecuteEnv,
   ReplyMsg,
   ReplyOn,
-  RustResult,
   SubMsg,
   TraceLog,
-  ExecuteTraceLog,
-  ReplyTraceLog,
   DebugLog,
   Snapshot,
-} from '../types';
+} from '../../types';
 import { Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
-import { fromBinary, fromRustResult, toBinary } from '../util';
-import { NEVER_IMMUTIFY, Transactional, TransactionalLens } from '../store/transactional';
-
-function numberToBigEndianUint64(n: number): Uint8Array {
-  const buffer = new ArrayBuffer(8);
-  const view = new DataView(buffer);
-  view.setUint32(0, n, false);
-  view.setUint32(4, 0, false);
-  return new Uint8Array(buffer);
-}
+import { fromBinary, toBinary } from '../../util';
+import { NEVER_IMMUTIFY, Transactional, TransactionalLens } from '../../store/transactional';
+import { buildAppResponse, buildContractAddress } from './wasm-util';
+import Contract from './contract';
 
 type WasmData = {
   lastCodeId: number;
@@ -90,7 +74,7 @@ export class WasmModule {
   public readonly store: TransactionalLens<WasmData>;
   
   // TODO: benchmark w/ many coexisting VMs
-  private vms: Record<string, CWSimulateVMInstance> = {};
+  private contracts: Record<string, Contract> = {};
 
   constructor(public chain: CWSimulateApp) {
     this.store = chain.store.db.lens<WasmData>('wasm').initialize({
@@ -100,28 +84,6 @@ export class WasmModule {
       contracts: {},
       contractStorage: {},
     });
-  }
-
-  static buildContractAddress(codeId: number, instanceId: number): Uint8Array {
-    let contractId = new Uint8Array([
-      ...numberToBigEndianUint64(codeId),
-      ...numberToBigEndianUint64(instanceId),
-    ]);
-
-    // append module name
-    let mKey = new Uint8Array([
-      ...Uint8Array.from(Buffer.from('wasm', 'utf-8')),
-      0,
-    ]);
-    let payload = new Uint8Array([...mKey, ...contractId]);
-
-    let hasher = new Sha256();
-    hasher.update(Buffer.from('module', 'utf-8'));
-    let th = hasher.digest();
-    hasher = new Sha256(th);
-    hasher.update(payload);
-    let hash = hasher.digest();
-    return hash.slice(0, 20);
   }
 
   setContractStorage(contractAddress: string, value: Map<string, string>) {
@@ -166,14 +128,8 @@ export class WasmModule {
     return lens.data.toObject() as any as ContractInfo;
   }
 
-  deleteContractInfo(contractAddress: string) {
-    this.store.tx((_, deleter) => {
-      deleter('contracts', contractAddress);
-      return Ok(undefined);
-    });
-  }
-
-  create(creator: string, wasmCode: Uint8Array): number {
+  /** Store a new CosmWasm smart contract bytecode */
+  storeCode(creator: string, wasmCode: Uint8Array) {
     return this.chain.pushBlock(() => {
       return this.store.tx(setter => {
         let codeInfo: CodeInfo = {
@@ -186,9 +142,15 @@ export class WasmModule {
         setter('lastCodeId')(codeId);
         return Ok(codeId);
       });
-    }).unwrap();
+    });
   }
 
+  /** Alias for `storeCode`, except it `.unwrap`s the result - kept for backwards compatibility */
+  create(creator: string, wasmCode: Uint8Array): number {
+    return this.storeCode(creator, wasmCode).unwrap();
+  }
+
+  /** Get the `ExecuteEnv` under which the next execution should run */
   getExecutionEnv(contractAddress: string): ExecuteEnv {
     return {
       block: {
@@ -202,45 +164,17 @@ export class WasmModule {
     };
   }
 
-  hasVM(contractAddress: string): boolean {
-    return !!this.vms[contractAddress];
-  }
-
-  async buildVM(contractAddress: string): Promise<CWSimulateVMInstance> {
-    if (!(contractAddress in this.vms)) {
-      const contractInfo = this.getContractInfo(contractAddress);
-      if (!contractInfo)
-        throw new Error(`contract ${contractAddress} not found`);
-
-      const { codeId } = contractInfo;
-      const codeInfo = this.getCodeInfo(codeId);
-      if (!codeInfo)
-        throw new Error(`code ${codeId} not found`);
-
-      const { wasmCode } = codeInfo;
-      const contractState = this.getContractStorage(contractAddress);
-
-      let storage = new BasicKVIterStorage();
-      storage.dict = contractState;
-
-      let backend: IBackend = {
-        backend_api: new BasicBackendApi(this.chain.bech32Prefix),
-        storage,
-        querier: this.chain.querier,
-      };
-
-      const logs: DebugLog[] = [];
-      const vm = new CWSimulateVMInstance(logs, backend);
-      await vm.build(wasmCode);
-      this.vms[contractAddress] = vm;
+  getContract(address: string) {
+    if (!this.contracts[address]) {
+      this.contracts[address] = new Contract(this, address);
     }
-    return this.vms[contractAddress];
+    return this.contracts[address]!;
   }
 
-  // TODO: add admin, label, etc.
-  registerContractInstance(sender: string, codeId: number, label:string): string {
+  /** Register a new contract instance from codeId */
+  protected registerContractInstance(sender: string, codeId: number, label = '', admin: string | null = null): Result<string, string> {
     return this.store.tx(setter => {
-      const contractAddressHash = WasmModule.buildContractAddress(
+      const contractAddressHash = buildContractAddress(
         codeId,
         this.lastInstanceId + 1
       );
@@ -253,7 +187,7 @@ export class WasmModule {
       const contractInfo = {
         codeId,
         creator: sender,
-        admin: null,
+        admin,
         label,
         created: this.chain.height,
       };
@@ -263,31 +197,7 @@ export class WasmModule {
 
       setter('lastInstanceId')(this.lastInstanceId + 1);
       return Ok(contractAddress);
-    }).unwrap();
-  }
-
-  async callInstantiate(
-    sender: string,
-    funds: Coin[],
-    contractAddress: string,
-    instantiateMsg: any,
-    logs: DebugLog[]
-  ): Promise<RustResult<ContractResponse>> {
-    let vm = await this.buildVM(contractAddress);
-    let env = this.getExecutionEnv(contractAddress);
-    let info = { sender, funds };
-
-    let res = vm.instantiate(env, info, instantiateMsg)
-      .json as RustResult<ContractResponse>;
-
-    this.setContractStorage(
-      contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
-    );
-
-    logs.push(...vm.logs);
-
-    return res;
+    });
   }
 
   async instantiateContract(
@@ -302,23 +212,24 @@ export class WasmModule {
       const snapshot = this.store.db.data;
       
       // first register the contract instance
-      const contractAddress = this.registerContractInstance(sender, codeId, label);
+      const contractAddress = this.registerContractInstance(sender, codeId, label).unwrap();
       let logs = [] as DebugLog[];
+      
+      const contract = await this.getContract(contractAddress).init();
 
-      const send = this.chain.bank.send(sender, contractAddress, funds);
+      const send = this.chain.bank.send(sender, contract.address, funds);
       if (send.err) return send;
 
       // then call instantiate
-      let response = await this.callInstantiate(
+      let response = contract.instantiate(
         sender,
         funds,
-        contractAddress,
         instantiateMsg,
         logs
       );
 
-      if ('error' in response) {
-        let result = Err(response.error);
+      if (response.err) {
+        let result = Err(response.val);
         trace.push({
           [NEVER_IMMUTIFY]: true,
           type: 'instantiate' as 'instantiate',
@@ -334,7 +245,6 @@ export class WasmModule {
           storeSnapshot: snapshot,
           result,
         });
-        
         return result;
       }
       else {
@@ -345,17 +255,17 @@ export class WasmModule {
             { key: 'code_id', value: codeId.toString() },
           ],
         };
-        let res = this.buildAppResponse(
+        let res = buildAppResponse(
           contractAddress,
           customEvent,
-          response.ok
+          response.val,
         );
 
         let subtrace: TraceLog[] = [];
 
         let result = await this.handleContractResponse(
           contractAddress,
-          response.ok.messages,
+          response.val.messages,
           res,
           subtrace
         );
@@ -382,33 +292,7 @@ export class WasmModule {
     });
   }
 
-  callExecute(
-    sender: string,
-    funds: Coin[],
-    contractAddress: string,
-    executeMsg: any,
-    logs: DebugLog[],
-  ): RustResult<ContractResponse> {
-    let vm = this.vms[contractAddress];
-    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
-    vm.resetDebugInfo();
-
-    let env = this.getExecutionEnv(contractAddress);
-    let info = { sender, funds };
-
-    let res = vm.execute(env, info, executeMsg)
-      .json as RustResult<ContractResponse>;
-
-    this.setContractStorage(
-      contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
-    );
-
-    logs.push(...vm.logs);
-
-    return res;
-  }
-
+  /** Call execute on the CW SC */
   async executeContract(
     sender: string,
     funds: Coin[],
@@ -417,22 +301,23 @@ export class WasmModule {
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     return await this.chain.pushBlock(async () => {
-      let snapshot = this.store.db.data;
-      let logs: DebugLog[] = [];
+      const snapshot = this.store.db.data;
+      const contract = await this.getContract(contractAddress).init();
+      const env = contract.getExecutionEnv();
+      const logs: DebugLog[] = [];
 
       const send = this.chain.bank.send(sender, contractAddress, funds);
       if (send.err) return send;
 
-      let response = this.callExecute(
+      const response = contract.execute(
         sender,
         funds,
-        contractAddress,
         executeMsg,
         logs
       );
       
-      if ('error' in response) {
-        let result = Err(response.error);
+      if (response.err) {
+        const result = Err(response.val);
         
         trace.push({
           [NEVER_IMMUTIFY]: true,
@@ -440,7 +325,7 @@ export class WasmModule {
           contractAddress,
           msg: executeMsg,
           response,
-          env: this.getExecutionEnv(contractAddress),
+          env,
           info: {
             sender,
             funds,
@@ -463,16 +348,16 @@ export class WasmModule {
           ],
         };
         
-        let res = this.buildAppResponse(
+        let res = buildAppResponse(
           contractAddress,
           customEvent,
-          response.ok
+          response.val,
         );
         
         let subtrace: TraceLog[] = [];
         let result = await this.handleContractResponse(
           contractAddress,
-          response.ok.messages,
+          response.val.messages,
           res,
           subtrace
         );
@@ -487,7 +372,7 @@ export class WasmModule {
             sender,
             funds,
           },
-          env: this.getExecutionEnv(contractAddress),
+          env,
           trace: subtrace,
           logs,
           storeSnapshot: this.store.db.data,
@@ -499,19 +384,19 @@ export class WasmModule {
     });
   }
 
-  async handleContractResponse(
+  /** Process contract response & execute (sub)messages */
+  protected async handleContractResponse(
     contractAddress: string,
     messages: ContractResponse['messages'],
     res: AppResponse,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let snapshot = this.chain.store;
     for (const message of messages) {
-      let subres = await this.executeSubmsg(contractAddress, message, trace);
+      const subres = await this.handleSubmsg(contractAddress, message, trace);
       if (subres.err) {
-        this.chain.store = snapshot; // revert
         return subres;
-      } else {
+      }
+      else {
         res.events = [...res.events, ...subres.val.events];
         if (subres.val.data !== null) {
           res.data = subres.val.data;
@@ -522,7 +407,8 @@ export class WasmModule {
     return Ok({ events: res.events, data: res.data });
   }
 
-  async executeSubmsg(
+  /** Handle a submessage returned in the response of a contract execution */
+  protected async handleSubmsg(
     contractAddress: string,
     message: SubMsg,
     trace: TraceLog[] = []
@@ -597,43 +483,24 @@ export class WasmModule {
     });
   }
 
-  callReply(
-    contractAddress: string,
-    replyMsg: ReplyMsg,
-    logs: DebugLog[],
-  ): RustResult<ContractResponse> {
-    let vm = this.vms[contractAddress];
-    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
-    
-    let res = vm.reply(this.getExecutionEnv(contractAddress), replyMsg)
-      .json as RustResult<ContractResponse>;
-
-    this.setContractStorage(
-      contractAddress,
-      (vm.backend.storage as BasicKVIterStorage).dict
-    );
-
-    logs.push(...vm.logs);
-
-    return res;
-  }
-
-  async reply(
+  protected async reply(
     contractAddress: string,
     replyMsg: ReplyMsg,
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
-    let logs: DebugLog[] = [];
-    let response = this.callReply(contractAddress, replyMsg, logs);
+    const logs: DebugLog[] = [];
+    const contract = this.getContract(contractAddress);
+    const env = contract.getExecutionEnv();
+    const response = contract.reply(replyMsg, logs);
     
-    if ('error' in response) {
-      let result = Err(response.error);
+    if (response.err) {
+      const result = Err(response.val);
       
       trace.push({
         [NEVER_IMMUTIFY]: true,
         type: 'reply' as 'reply',
         contractAddress,
-        env: this.getExecutionEnv(contractAddress),
+        env,
         msg: replyMsg,
         response,
         logs,
@@ -644,7 +511,7 @@ export class WasmModule {
       return result;
     }
     else {
-      let customEvent = {
+      const customEvent = {
         type: 'reply',
         attributes: [
           {
@@ -659,18 +526,18 @@ export class WasmModule {
         ],
       };
       
-      let res = this.buildAppResponse(
+      let res = buildAppResponse(
         contractAddress,
         customEvent,
-        response.ok
+        response.val,
       );
       
       let subtrace: TraceLog[] = [];
       let result = await this.handleContractResponse(
         contractAddress,
-        response.ok.messages,
+        response.val.messages,
         res,
-        subtrace
+        subtrace,
       );
       
       trace.push({
@@ -678,7 +545,7 @@ export class WasmModule {
         type: 'reply' as 'reply',
         contractAddress,
         msg: replyMsg,
-        env: this.getExecutionEnv(contractAddress),
+        env,
         response,
         trace: subtrace,
         logs,
@@ -694,12 +561,7 @@ export class WasmModule {
     contractAddress: string,
     queryMsg: any
   ): Result<any, string> {
-    let vm = this.vms[contractAddress];
-    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
-    
-    let env = this.getExecutionEnv(contractAddress);
-    return fromRustResult(vm.query(env, queryMsg).json as RustResult<string>)
-      .andThen(v => Ok(fromBinary(v)));
+    return this.getContract(contractAddress).query(queryMsg);
   }
   
   queryTrace(
@@ -707,64 +569,7 @@ export class WasmModule {
     queryMsg: any,
   ): Result<any, string> {
     let { contractAddress, storeSnapshot } = trace;
-    let vm = this.vms[contractAddress];
-    if (!vm) throw new Error(`No VM for contract ${contractAddress}`);
-    
-    // time travel
-    const currBackend = vm.backend;
-    const storage = new BasicKVIterStorage(this.getContractStorage(contractAddress, storeSnapshot));
-    vm.backend = {
-      ...vm.backend,
-      storage,
-    };
-    
-    try {
-      return this.query(contractAddress, queryMsg);
-    }
-    // reset time travel
-    finally {
-      vm.backend = currBackend;
-    }
-  }
-
-  buildAppResponse(
-    contract: string,
-    customEvent: Event,
-    response: ContractResponse
-  ): AppResponse {
-    let appEvents = [];
-    // add custom event
-    appEvents.push(customEvent);
-
-    // add contract attributes under `wasm` event type
-    if (response.attributes.length > 0) {
-      appEvents.push({
-        type: 'wasm',
-        attributes: [
-          {
-            key: '_contract_addr',
-            value: contract,
-          },
-          ...response.attributes,
-        ],
-      });
-    }
-
-    // add events and prefix with `wasm-`
-    for (const event of response.events) {
-      appEvents.push({
-        type: `wasm-${event.type}`,
-        attributes: [
-          { key: '_contract_addr', value: contract },
-          ...event.attributes,
-        ],
-      });
-    }
-
-    return {
-      events: appEvents,
-      data: response.data,
-    };
+    return this.getContract(contractAddress).query(queryMsg, storeSnapshot as Map<string, string>);
   }
 
   async handleMsg(
@@ -857,6 +662,7 @@ export class WasmModule {
   get lastCodeId() { return this.store.get('lastCodeId') }
   get lastInstanceId() { return this.store.get('lastInstanceId') }
 }
-function lensFromSnapshot(snapshot: Snapshot) {
+
+export function lensFromSnapshot(snapshot: Snapshot) {
   return new Transactional(snapshot).lens<WasmData>('wasm');
 }

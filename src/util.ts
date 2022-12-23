@@ -8,11 +8,13 @@ export const isArrayLike = (value: any): value is any[] =>
 export const toBinary = (value: any): Binary => toBase64(toUtf8(JSON.stringify(value)));
 export const fromBinary = (str: string): unknown => JSON.parse(fromUtf8(fromBase64(str)));
 
-export function fromRustResult<T>(res: RustResult<T>): Result<T, string> {
+export function fromRustResult<T>(res: RustResult<T>): Result<T, string>;
+export function fromRustResult<T>(res: any): Result<T, string>;
+export function fromRustResult<T>(res: any): Result<T, string> {
   if ('ok' in res) {
     return Ok(res.ok);
   }
-  else if ('error' in res) {
+  else if (typeof res.error === 'string') {
     return Err(res.error);
   }
   else throw new Error('Invalid RustResult type');

@@ -126,7 +126,7 @@ interface TraceLogCommon {
   contractAddress: string;
   env: ExecuteEnv;
   msg: any;
-  response: RustResult<ContractResponse>;
+  response: Result<ContractResponse, string>;
   logs: DebugLog[];
   trace?: TraceLog[];
   storeSnapshot: Snapshot;
