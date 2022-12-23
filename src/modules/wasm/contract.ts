@@ -50,7 +50,7 @@ export default class Contract {
     instantiateMsg: any,
     logs: DebugLog[]
   ): Result<ContractResponse, string> {
-    if (!this._vm) throw new Error(`No VM for contract ${this.address}`);
+    if (!this._vm) throw new NoVMError(this.address);
     const vm = this._vm;
     const env = this.getExecutionEnv();
     const info = { sender, funds };
@@ -72,7 +72,7 @@ export default class Contract {
   ): Result<ContractResponse, string>
   {
     const vm = this._vm;
-    if (!vm) throw new Error(`No VM for contract ${this.address}`);
+    if (!vm) throw new NoVMError(this.address);
     vm.resetDebugInfo();
 
     const env = this.getExecutionEnv();

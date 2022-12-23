@@ -1,6 +1,6 @@
 import { isCollection, isList, isMap, List, Map } from "immutable";
-import { Ok, Result } from "ts-results";
-import { isArrayLike } from "../util";
+import { Err, Ok, Result } from "ts-results";
+import { fromRustResult, isArrayLike, isRustResult, isTSResult } from "../util";
 
 // NEVER_IMMUTIFY is a string because that's easily serializable with different algorithms - symbols are not
 export type NeverImmutify = typeof NEVER_IMMUTIFY;
@@ -66,7 +66,7 @@ export class Transactional {
         })
         .catch(reason => {
           this._data = snapshot;
-          return reason;
+          throw reason;
         })
       }
       else {

@@ -26,3 +26,6 @@ export function toRustResult<T>(res: Result<T, string>): RustResult<T> {
     return { error: res.val }
   }
 }
+
+export const isRustResult = <T = unknown>(value: any): value is RustResult<T> => 'ok' in value || 'err' in value;
+export const isTSResult = <T = unknown, E = string>(value: any): value is Result<T, E> => typeof value.ok === 'boolean' && typeof value.err === 'boolean' && 'val' in value;
