@@ -1,6 +1,6 @@
 import { Coin } from '@cosmjs/amino';
 import { toAscii, toBase64 } from '@cosmjs/encoding';
-import { Result } from 'ts-results';
+import { Err, Result } from 'ts-results';
 import { cmd, exec, TestContract, TestContractInstance } from '../../testing/wasm-util';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { AppResponse, Event, ReplyOn, TraceLog } from '../types';
@@ -485,6 +485,59 @@ describe('TraceLog', () => {
         ],
       },
     ]);
+  });
+  
+  it('traces errors', async () => {
+    const trace: TraceLog[] = [];
+    
+    const executeMsg1 = {
+      run: { failure: true }
+    };
+    await testContract.execute(
+      info.sender,
+      executeMsg1,
+      [],
+      trace,
+    );
+    
+    const err1 = { ok: false, err: true };
+    const ref1 = {
+      type: 'execute',
+      contractAddress: testContract.address,
+      msg: executeMsg1,
+      info: {
+        sender: info.sender,
+        funds: [],
+      },
+      response: err1,
+      result: err1,
+    };
+    expect(trace).toMatchObject([ ref1 ]);
+    
+    const funds = [{ denom: 'uluna', amount: '99999999999999999999' }];
+    const executeMsg2 = {
+      debug: { msg: 'foobar' }
+    };
+    await testContract.execute(
+      info.sender,
+      executeMsg2,
+      funds,
+      trace,
+    );
+    
+    const err2 = { ok: false, err: true };
+    const ref2 = {
+      type: 'execute',
+      contractAddress: testContract.address,
+      msg: executeMsg2,
+      info: {
+        sender: info.sender,
+        funds,
+      },
+      response: err2,
+      result: err2,
+    };
+    expect(trace).toMatchObject([ ref1, ref2 ]);
   });
 });
 

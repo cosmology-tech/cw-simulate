@@ -1,6 +1,8 @@
 import { toBech32 } from '@cosmjs/encoding';
+import { Map } from 'immutable';
+import { Err, Ok, Result } from 'ts-results';
 import type { CWSimulateApp } from '../../CWSimulateApp';
-
+import { NEVER_IMMUTIFY, Transactional, TransactionalLens } from '../../store/transactional';
 import {
   AppResponse,
   Binary,
@@ -11,19 +13,18 @@ import {
   ContractResponse,
   Event,
   ExecuteEnv,
+  ExecuteTraceLog,
   ReplyMsg,
   ReplyOn,
+  ReplyTraceLog,
   SubMsg,
   TraceLog,
   DebugLog,
   Snapshot,
 } from '../../types';
-import { Map } from 'immutable';
-import { Err, Ok, Result } from 'ts-results';
 import { fromBinary, toBinary } from '../../util';
-import { NEVER_IMMUTIFY, Transactional, TransactionalLens } from '../../store/transactional';
-import { buildAppResponse, buildContractAddress } from './wasm-util';
 import Contract from './contract';
+import { buildAppResponse, buildContractAddress } from './wasm-util';
 
 type WasmData = {
   lastCodeId: number;
@@ -209,16 +210,31 @@ export class WasmModule {
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     return await this.chain.pushBlock(async () => {
-      const snapshot = this.store.db.data;
-      
       // first register the contract instance
       const contractAddress = this.registerContractInstance(sender, codeId, label).unwrap();
       let logs = [] as DebugLog[];
       
       const contract = await this.getContract(contractAddress).init();
+      const tracebase: Omit<ExecuteTraceLog, 'response' | 'result'> = {
+        [NEVER_IMMUTIFY]: true,
+        type: 'instantiate',
+        contractAddress,
+        msg: instantiateMsg,
+        info: { sender, funds },
+        logs,
+        env: contract.getExecutionEnv(),
+        storeSnapshot: this.store.db.data,
+      }
 
       const send = this.chain.bank.send(sender, contract.address, funds);
-      if (send.err) return send;
+      if (send.err) {
+        trace.push({
+          ...tracebase,
+          response: send,
+          result: send,
+        });
+        return send;
+      }
 
       // then call instantiate
       let response = contract.instantiate(
@@ -229,23 +245,12 @@ export class WasmModule {
       );
 
       if (response.err) {
-        let result = Err(response.val);
         trace.push({
-          [NEVER_IMMUTIFY]: true,
-          type: 'instantiate' as 'instantiate',
-          contractAddress,
-          msg: instantiateMsg,
+          ...tracebase,
           response,
-          info: {
-            sender,
-            funds,
-          },
-          env: this.getExecutionEnv(contractAddress),
-          logs,
-          storeSnapshot: snapshot,
-          result,
+          result: response,
         });
-        return result;
+        return response;
       }
       else {
         let customEvent: Event = {
@@ -271,20 +276,11 @@ export class WasmModule {
         );
 
         trace.push({
-          [NEVER_IMMUTIFY]: true,
-          type: 'instantiate' as 'instantiate',
-          contractAddress,
-          msg: instantiateMsg,
+          ...tracebase,
           response,
-          info: {
-            sender,
-            funds,
-          },
-          env: this.getExecutionEnv(contractAddress),
-          logs,
+          result,
           trace: subtrace,
           storeSnapshot: this.store.db.data,
-          result,
         });
 
         return result;
@@ -301,13 +297,29 @@ export class WasmModule {
     trace: TraceLog[] = []
   ): Promise<Result<AppResponse, string>> {
     return await this.chain.pushBlock(async () => {
-      const snapshot = this.store.db.data;
       const contract = await this.getContract(contractAddress).init();
-      const env = contract.getExecutionEnv();
       const logs: DebugLog[] = [];
+      
+      const tracebase: Omit<ExecuteTraceLog, 'response' | 'result'> = {
+        [NEVER_IMMUTIFY]: true,
+        type: 'execute',
+        contractAddress,
+        msg: executeMsg,
+        logs,
+        env: contract.getExecutionEnv(),
+        info: { sender, funds },
+        storeSnapshot: this.store.db.data,
+      }
 
       const send = this.chain.bank.send(sender, contractAddress, funds);
-      if (send.err) return send;
+      if (send.err) {
+        trace.push({
+          ...tracebase,
+          response: send,
+          result: send,
+        });
+        return send;
+      }
 
       const response = contract.execute(
         sender,
@@ -317,25 +329,12 @@ export class WasmModule {
       );
       
       if (response.err) {
-        const result = Err(response.val);
-        
         trace.push({
-          [NEVER_IMMUTIFY]: true,
-          type: 'execute' as 'execute',
-          contractAddress,
-          msg: executeMsg,
+          ...tracebase,
           response,
-          env,
-          info: {
-            sender,
-            funds,
-          },
-          logs,
-          storeSnapshot: snapshot,
-          result,
+          result: response,
         });
-        
-        return result;
+        return response;
       }
       else {
         let customEvent = {
@@ -363,20 +362,11 @@ export class WasmModule {
         );
         
         trace.push({
-          [NEVER_IMMUTIFY]: true,
-          type: 'execute' as 'execute',
-          contractAddress,
-          msg: executeMsg,
+          ...tracebase,
           response,
-          info: {
-            sender,
-            funds,
-          },
-          env,
-          trace: subtrace,
-          logs,
-          storeSnapshot: this.store.db.data,
           result,
+          trace: subtrace,
+          storeSnapshot: this.store.db.data,
         });
         
         return result;
@@ -490,25 +480,25 @@ export class WasmModule {
   ): Promise<Result<AppResponse, string>> {
     const logs: DebugLog[] = [];
     const contract = this.getContract(contractAddress);
-    const env = contract.getExecutionEnv();
     const response = contract.reply(replyMsg, logs);
     
+    const tracebase: Omit<ReplyTraceLog, 'response' | 'result'> = {
+      [NEVER_IMMUTIFY]: true,
+      type: 'reply',
+      contractAddress,
+      msg: replyMsg,
+      env: contract.getExecutionEnv(),
+      logs,
+      storeSnapshot: this.store.db.data,
+    }
+    
     if (response.err) {
-      const result = Err(response.val);
-      
       trace.push({
-        [NEVER_IMMUTIFY]: true,
-        type: 'reply' as 'reply',
-        contractAddress,
-        env,
-        msg: replyMsg,
+        ...tracebase,
         response,
-        logs,
-        storeSnapshot: this.store.db.data,
-        result,
+        result: response,
       });
-      
-      return result;
+      return response;
     }
     else {
       const customEvent = {
@@ -541,16 +531,10 @@ export class WasmModule {
       );
       
       trace.push({
-        [NEVER_IMMUTIFY]: true,
-        type: 'reply' as 'reply',
-        contractAddress,
-        msg: replyMsg,
-        env,
+        ...tracebase,
         response,
-        trace: subtrace,
-        logs,
-        storeSnapshot: this.store.db.data,
         result,
+        storeSnapshot: this.store.db.data,
       });
       
       return result;
@@ -657,6 +641,15 @@ export class WasmModule {
   
   private lens(storage?: Snapshot) {
     return storage ? lensFromSnapshot(storage) : this.store;
+  }
+  
+  protected pushTrace(traces: TraceLog[], details: Omit<TraceLog, typeof NEVER_IMMUTIFY | 'env'>) {
+    //@ts-ignore
+    traces.push({
+      [NEVER_IMMUTIFY]: true,
+      ...details,
+      env: this.getExecutionEnv(details.contractAddress),
+    });
   }
   
   get lastCodeId() { return this.store.get('lastCodeId') }
