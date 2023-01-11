@@ -4,6 +4,7 @@ import { WasmModule, WasmQuery } from './modules/wasm';
 import { BankModule, BankQuery } from './modules/bank';
 import { Transactional, TransactionalLens } from './store/transactional';
 import { AppResponse, Binary } from './types';
+import { SERDE } from '@kiruse/serde';
 
 export interface CWSimulateAppOptions {
   chainId: string;
@@ -16,6 +17,7 @@ export type ChainData = {
 }
 
 export class CWSimulateApp {
+  [SERDE] = 'cw-simulate-app' as const;
   public chainId: string;
   public bech32Prefix: string;
 

@@ -1,12 +1,18 @@
-import SerdeProtocol, { SERDE } from '@kiruse/serde';
+import Serde, { SERDE, StandardProtocolMap } from '@kiruse/serde';
 import { Reference } from '@kiruse/serde/dist/types';
 import { List, Map } from 'immutable';
 import { Ok } from 'ts-results';
 import { CWSimulateApp } from './CWSimulateApp';
 
-export const serde = SerdeProtocol.standard()
-  .derive('immutable-list',
-    (list: List<any>, data) => {
+type Protocols = StandardProtocolMap & {
+  'immutable-list': List<any>;
+  'immutable-map': Map<any, any>;
+  'cw-simulate-app': CWSimulateApp;
+}
+
+export const serde = Serde<Protocols>().standard()
+  .setSimple('immutable-list',
+    (list, data) => {
       return {
         data: data(list.toArray()),
         // ownerID is a unique object that should not even appear on
@@ -28,8 +34,8 @@ export const serde = SerdeProtocol.standard()
       return list;
     },
   )
-  .derive('immutable-map',
-    (map: Map<any, any>, data) => {
+  .setSimple('immutable-map',
+    (map, data) => {
       return {
         data: data(map.toObject()),
         // same as with List above
@@ -50,13 +56,13 @@ export const serde = SerdeProtocol.standard()
       return map;
     },
   )
-  .derive('cw-simulate-app',
-    (app: CWSimulateApp) => ({
+  .setSimple('cw-simulate-app',
+    (app) => ({
       chainId: app.chainId,
       bech32Prefix: app.bech32Prefix,
       store: app.store.db.data,
     }),
-    ({ chainId, bech32Prefix, store }, deref): CWSimulateApp => {
+    ({ chainId, bech32Prefix, store }, deref) => {
       const app = new CWSimulateApp({
         chainId,
         bech32Prefix,
