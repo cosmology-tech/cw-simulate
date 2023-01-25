@@ -1,10 +1,10 @@
 import { Coin } from '@cosmjs/amino';
 import { fromJS, List, Map } from 'immutable';
 import { Err, Ok, Result } from 'ts-results';
-import { Binary } from '../types';
+import { Binary, Snapshot } from '../types';
 import { CWSimulateApp } from '../CWSimulateApp';
 import { toBinary } from '../util';
-import { fromImmutable, toImmutable, TransactionalLens } from '../store/transactional';
+import { Transactional, TransactionalLens } from '../store/transactional';
 
 export interface AppResponse {
   events: any[];
@@ -123,16 +123,12 @@ export class BankModule {
     });
   }
 
-  public getBalance(address: string): Coin[] {
-    return this.store.getObject('balances', address) ?? [];
+  public getBalance(address: string, storage?: Snapshot): Coin[] {
+    return this.lens(storage).getObject('balances', address) ?? [];
   }
   
   public getBalances() {
     return this.store.getObject('balances');
-  }
-  
-  public getImmutableBalances() {
-    return this.store.get('balances');
   }
   
   public deleteBalance(address:string) {
@@ -201,6 +197,9 @@ export class BankModule {
     }
     return Err('Unknown bank query');
   }
+    private lens(storage?: Snapshot) {
+    return storage ? lensFromSnapshot(storage) : this.store;
+  }
 }
 
 /** Essentially a `Coin`, but the `amount` is a `bigint` for more convenient use. */
@@ -217,4 +216,8 @@ export class ParsedCoin {
   static fromCoin(coin: Coin) {
     return new ParsedCoin(coin.denom, BigInt(coin.amount));
   }
+}
+
+export function lensFromSnapshot(snapshot: Snapshot) {
+  return new Transactional(snapshot).lens<BankData>('contracts');
 }
