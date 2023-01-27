@@ -124,8 +124,9 @@ export class BankModule {
   }
 
   public getBalance(address: string, storage?: Snapshot): Coin[] {
-    return this.lens(storage).getObject('balances', address) ?? [];
+    return this.lens(storage).getObject('balances',address) ?? [];
   }
+  
   
   public getBalances() {
     return this.store.getObject('balances');
@@ -219,5 +220,5 @@ export class ParsedCoin {
 }
 
 export function lensFromSnapshot(snapshot: Snapshot) {
-  return new Transactional(snapshot).lens<BankData>('contracts');
+  return new Transactional(snapshot).lens<BankData>('bank');
 }
